@@ -4,6 +4,6 @@ import { liveLocation } from "../controllers/location.controller";
 const router = express.Router();
 
 
-router.post("/location", liveLocation);
+router.post("/live", liveLocation);
 
 export default router;
