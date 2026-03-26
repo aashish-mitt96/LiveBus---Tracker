@@ -7,12 +7,13 @@
     "paths": {
       "@/*": ["src/*"]
     },
+    "rootDir": "./src",    
     "outDir": "./dist",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "drizzle.config.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "drizzle", "dist"]
 }
