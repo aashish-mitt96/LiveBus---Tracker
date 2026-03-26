@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { Request, Response } from "express";
 
-import { db } from "../db/dbConnection";
-import { trip } from "../db/schema/trip.schema";
+import { db } from "../database/dbConnection";
+import { trip } from "../database/schema/trip.schema";
 
 
 // Start a Bus Trip.

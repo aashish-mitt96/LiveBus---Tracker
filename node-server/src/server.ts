@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import cors from 'cors';
 
 import tripRoutes from './routes/trip.route';
+import userRoutes from './routes/user.route';
 import locationRoutes from './routes/location.route';
 
 import { initSocket } from './socket/socket';
@@ -31,8 +32,10 @@ bootstrap().catch(console.error);
 
 
 // Routes.
-app.use("/api/trips",    tripRoutes);
-app.use("/api/location", locationRoutes);
+app.use("/api/trips",    tripRoutes);                                   
+app.use("/api/bus",      userRoutes);                                  
+app.use("/api/location", locationRoutes);                               
+
 
 
 // Start Server.
