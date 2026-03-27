@@ -17,11 +17,18 @@ export default function Driver() {
   const [tripId, setTripId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Tracking Hook.
-  const { isTracking, startTracking, stopTracking, lastSent, error } = useTracking(tripId);
-
   const python_backend_url = import.meta.env.VITE_PYTHON_BACKEND_URL || "http://localhost:8000";
   const environment = import.meta.env.VITE_ENVIRONMENT || "development";
+
+  // Tracking Hook.
+  const { isTracking, busStatus, startTracking, stopTracking, lastSent, error } = useTracking(tripId);
+
+  // Add this Status Config.
+  const STATUS_CONFIG = {
+    idle: { label: "Idle", color: "#5a6070", bg: "#0d0f14", border: "#1e2530" },
+    moving: { label: "🟢 Moving", color: "#4ade80", bg: "#0d1a0d", border: "#2d4a2d" },
+    stopped: { label: "🔴 Stopped", color: "#f87171", bg: "#1a0d0d", border: "#4a2d2d" },
+  } as const;
 
 
   // 1. Start Trip.
@@ -33,32 +40,28 @@ export default function Driver() {
     try {
       setLoading(true);
 
-      // Step 1: Wake up the Python backend
+      // Wake Python Server.
       if (environment === "production") {
         await fetch(python_backend_url)
           .then(res => {
             if (!res.ok) throw new Error("Backend wake-up failed");
-            console.log("Backend woke up!");
           })
           .catch(err => {
-            console.error("Failed to wake backend:", err);
+            console.error("Failed to wake backend... ", err);
           });
       }
 
-
       const res = await startTrip({ busNo, source, destination });
-
       const tripId = res.tripId;
       if (!tripId) {
         throw new Error("Invalid response from server");
       }
-
-      console.log("Trip Started:", tripId);
+      console.log("Trip Started... ", tripId);
       setTripId(tripId);
       setTripStarted(true);
 
     } catch (err) {
-      console.error("Start trip failed:", err);
+      console.error("Start trip failed... ", err);
       alert("Failed to start trip");
     } finally {
       setLoading(false);
@@ -71,10 +74,10 @@ export default function Driver() {
     try {
       if (tripId) {
         await endTrip(tripId);
-        console.log("Trip Ended:", tripId);
+        console.log("Trip Ended... ", tripId);
       }
     } catch (err) {
-      console.error("End trip failed", err);
+      console.error("End trip failed... ", err);
     }
     stopTracking();
     setTripStarted(false);
@@ -96,7 +99,7 @@ export default function Driver() {
           {/* HEADER */}
           <div className="header">
             <div>
-              <div className="header-label">Fleet Driver</div>
+              <div className="header-label">LiveBus</div>
               <div className="header-title">
                 {tripStarted ? "Trip Control" : "New Trip"}
               </div>
@@ -107,7 +110,7 @@ export default function Driver() {
           {/* FORM */}
           {!tripStarted && (
             <div className="fade-in">
-              <div className="section-label">Trip Details</div>
+              <div className="section-label">Enter Trip Details</div>
 
               <div className="field">
                 <div className="field-inner">
@@ -190,33 +193,44 @@ export default function Driver() {
           {tripStarted && (
             <div className="control-wrap fade-in">
 
-              {/* Trip Info */}
-              <div className="trip-badge">
-                <div className="trip-badge-dot" />
-                {tripId} · Active
-                <span style={{ marginLeft: "auto" }}>{busNo}</span>
+              {/* Trip ID */}
+              <div className="trip-id-card" style={{ width: "100%" }}>
+                <div className="trip-id-label">Trip ID</div>
+                <div className="trip-id-value">
+                  <div className="trip-id-dot" />
+                  {tripId}  
+                </div>
               </div>
 
-              {/* Controls */}
-              <button
-                className={`main-btn ${isTracking ? "active" : "inactive"}`}
-                onClick={() => {
-                  if (!tripId) return;
-                  isTracking ? stopTracking() : startTracking();
-                }}
-              >
-                {isTracking ? "STOP" : "START"}
-              </button>
-
-              {/* Status */}
-              <div>
-                {isTracking
-                  ? `Last sent: ${lastSent ?? 0}s ago`
-                  : "Tracking stopped"}
+              {/* Bus Status Pill */}
+              <div className={`status-pill ${busStatus}`}>
+                <div className="status-pill-dot" />
+                {busStatus === "moving" ? "Moving" : busStatus === "stopped" ? "Stopped" : "Idle"}
               </div>
 
-              {/* Error */}
-              {error && <p style={{ color: "red" }}>{error}</p>}
+              {/* Big centered start/stop button */}
+              <div className="orb-center">
+                <div className="pulse-ring-wrap">
+                  <div className={`ring ring-1 ${isTracking ? "active" : "inactive"}`} />
+                  <div className={`ring ring-2 ${isTracking ? "active" : "inactive"}`} />
+                  <div className={`ring ring-3 ${isTracking ? "active" : "inactive"}`} />
+                  <button
+                    className={`main-btn ${isTracking ? "active" : "inactive"}`}
+                    onClick={() => { if (!tripId) return; isTracking ? stopTracking() : startTracking(); }}
+                  >
+                    {isTracking ? "STOP" : "START"}
+                  </button>
+                </div>
+
+                {/* Last sent */}
+                <div className="last-sent-row">
+                  {isTracking
+                    ? `Last sent: ${lastSent ?? 0}s ago`
+                    : busStatus === "stopped" ? "Tracking stopped" : "Not tracking"}
+                </div>
+              </div>
+
+              {error && <p style={{ color: "red", fontSize: 13 }}>{error}</p>}
 
               {/* End Trip */}
               <button className="btn-end" onClick={handleEndTrip}>

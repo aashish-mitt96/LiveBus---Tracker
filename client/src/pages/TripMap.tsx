@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, useCallback } from "react";
+
+import '../styles/TripMap.css'
+import "leaflet/dist/leaflet.css";
+
 import L from "leaflet";
 import type { Map, Marker, Polyline } from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { io, Socket } from "socket.io-client";
-import '../styles/TripMap.css'
 
-// ── types ─────────────────────────────────────────────────────────────────────
+
 
 type LatLng = [number, number];
-
 type Status = "idle" | "connecting" | "riding" | "waiting" | "stopped" | "last_known";
 
 interface LocationUpdate {
@@ -21,8 +22,6 @@ interface LocationUpdate {
   timestamp: number;
 }
 
-// ── constants ─────────────────────────────────────────────────────────────────
-
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 const ANIM_DURATION = 10_000;
@@ -33,10 +32,8 @@ const STATUS_LABELS: Record<Status, string> = {
   riding: "Bus moving",
   waiting: "Waiting for next location…",
   stopped: "Bus stopped",
-  last_known: "Showing last known location",   // ✅ new
+  last_known: "Showing last known location",  
 };
-
-// ── pure helpers ──────────────────────────────────────────────────────────────
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
@@ -104,18 +101,14 @@ function buildFallbackPath(from: LatLng, to: LatLng, steps = 40): LatLng[] {
   return path;
 }
 
-// ── log entry type ────────────────────────────────────────────────────────────
-
 interface LogEntry {
   id: number;
   text: string;
   isNew: boolean;
 }
 
-// ── component ─────────────────────────────────────────────────────────────────
+export default function BusTracker() {
 
-export default function TripMap() {
-  // ── Read tripId from URL (:tripId param) ─────────────────────────────────
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
 
@@ -146,7 +139,6 @@ export default function TripMap() {
     });
   }, []);
 
-  // ── reset map state ──────────────────────────────────────────────────────
   const resetMapState = useCallback(() => {
     const map = mapRef.current;
     if (routeLayerRef.current && map) {
@@ -168,7 +160,6 @@ export default function TripMap() {
     setStatus("waiting");
   }, []);
 
-  // ── join room ────────────────────────────────────────────────────────────
   const joinRoom = useCallback((id: string) => {
     const socket = socketRef.current;
     if (!socket || !id.trim()) return;
@@ -184,7 +175,6 @@ export default function TripMap() {
     addLog(`[${new Date().toLocaleTimeString()}] Joined room: ${id} — waiting for updates…`);
   }, [addLog, resetMapState]);
 
-  // ── leave room → go back home ────────────────────────────────────────────
   const handleLeave = useCallback(() => {
     const socket = socketRef.current;
     if (socket && joinedRoomRef.current) {
@@ -194,7 +184,6 @@ export default function TripMap() {
     navigate("/");
   }, [navigate]);
 
-  // ── stop animation ───────────────────────────────────────────────────────
   const stopAnimation = useCallback(() => {
     if (animFrameRef.current !== null) {
       cancelAnimationFrame(animFrameRef.current);
@@ -202,7 +191,6 @@ export default function TripMap() {
     }
   }, []);
 
-  // ── animate segment ──────────────────────────────────────────────────────
   const animateSegment = useCallback(
     (from: LatLng, to: LatLng) => {
       const map = mapRef.current;
@@ -293,7 +281,6 @@ export default function TripMap() {
     [stopAnimation]
   );
 
-  // ── init Leaflet ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) return;
 
@@ -310,7 +297,6 @@ export default function TripMap() {
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // ── Socket.IO ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!tripId) return;
 
@@ -321,7 +307,6 @@ export default function TripMap() {
       setConnected(true);
       setStatus("connecting");
       addLog(`[${new Date().toLocaleTimeString()}] Connected to server.`);
-      // Auto-join the room from URL param
       setTimeout(() => joinRoom(tripId), 100);
     });
 
@@ -332,7 +317,6 @@ export default function TripMap() {
       addLog(`[${new Date().toLocaleTimeString()}] Disconnected from server.`);
     });
 
-    // ✅ Only one locationUpdate handler — for live updates only
     socket.on("locationUpdate", (data: LocationUpdate) => {
       if (data.tripId !== joinedRoomRef.current) return;
 
@@ -365,7 +349,6 @@ export default function TripMap() {
       }
     });
 
-    // ✅ Separate handler — only fires for cached last known location
     socket.on("lastKnownLocation", (data: LocationUpdate) => {
       if (data.tripId !== joinedRoomRef.current) return;
 

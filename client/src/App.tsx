@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Driver from './pages/Driver';
-import User from './pages/User';
 import TripMap from './pages/TripMap';
+import User from './pages/User';
 
 function App() {
 
@@ -9,7 +9,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Driver />} />
-        <Route path="/track" element={<User />} />
+        <Route path="/user" element={<User />} />
         <Route path="/tracker/:tripId" element={<TripMap />} />
       </Routes>
     </BrowserRouter>

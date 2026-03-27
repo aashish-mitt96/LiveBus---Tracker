@@ -301,52 +301,104 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding-top: 8px;
 }
 
-/* trip info pill */
-.trip-info-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-.trip-chip {
-  flex: 1;
+/* Trip ID card */
+.trip-id-card {
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px 14px;
+  border-radius: 16px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.trip-chip-label {
+.trip-id-label {
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   color: var(--muted);
   text-transform: uppercase;
-  margin-bottom: 4px;
 }
-.trip-chip-value {
-  font-family: var(--font-head);
-  font-size: 14px;
-  font-weight: 700;
+.trip-id-value {
+  font-family: "DM Mono", monospace;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── PULSE RING BUTTON ── */
-.orb-btn-wrap {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex: 1;
+  gap: 8px;
+}
+.trip-id-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite;
+}
+
+/* Status pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-family: "DM Mono", monospace;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+.status-pill.moving {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+.status-pill.stopped {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+}
+.status-pill.idle {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.status-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-pill.moving .status-pill-dot {
+  background: #16a34a;
+}
+.status-pill.stopped .status-pill-dot {
+  background: #e11d48;
+}
+.status-pill.idle .status-pill-dot {
+  background: var(--muted);
+}
+
+/* Centered big button */
+.orb-center {
+  display: flex;
   flex-direction: column;
-  gap: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  flex: 1;
 }
 .pulse-ring-wrap {
   position: relative;
-  width: 190px;
-  height: 190px;
+  width: 220px;
+  height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -393,13 +445,13 @@ body {
 }
 
 .main-btn {
-  width: 140px;
-  height: 140px;
+  width: 170px;
+  height: 170px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
   font-family: var(--font-head);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: 0.08em;
   display: flex;
@@ -428,78 +480,13 @@ body {
   color: var(--text);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
-.main-btn-sub {
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.7;
-  letter-spacing: 0.05em;
-}
 
-/* ── STATUS STRIP ── */
-.status-strip {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.status-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.status-dot.on {
-  background: var(--green);
-  box-shadow: 0 0 0 4px #16a34a18;
-  animation: blink 1.4s infinite;
-}
-.status-dot.off {
-  background: var(--muted);
-}
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-.status-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-.status-sub {
-  font-size: 11px;
+/* Last sent */
+.last-sent-row {
+  font-size: 12px;
   color: var(--muted);
-  margin-top: 1px;
-}
-.status-signal {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.last-sent-tag {
-  background: #dcfce7;
-  border: 1px solid #bbf7d0;
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 20px;
-}
-.last-sent-tag.off {
-  background: var(--surface2);
-  border-color: var(--border);
-  color: var(--muted);
+  font-family: "DM Mono", monospace;
+  text-align: center;
 }
 
 /* ── END TRIP ── */
@@ -522,7 +509,7 @@ body {
   transition:
     background 0.2s,
     transform 0.15s;
-  margin-top: 14px;
+  margin-top: 4px;
 }
 .btn-end:active {
   transform: scale(0.97);
