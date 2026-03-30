@@ -8,7 +8,9 @@ export const liveLocation = async (req: Request, res: Response) => {
         return res.status(400).json({ message: "Invalid data" });
     }
     try {
-        const rawData = { tripId, lat, lon, vel: vel ?? null, acc: acc ?? null,  timestamp: Date.now() };
+        const rawData = { 
+            tripId, lat, lon, vel: vel ?? null, acc: acc ?? null,  timestamp: Date.now(), status: status ?? "moving" 
+        };
 
         // Publish data to Redis Channel.
         await redisClient.publish('raw_location', JSON.stringify(rawData));
