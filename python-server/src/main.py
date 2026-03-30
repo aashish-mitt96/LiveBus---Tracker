@@ -1,9 +1,12 @@
 import os
 import threading
+
 from src import create_app, db
 from src.database.models import Trip
 from src.redis.redisSubscribe import subscribe_to_redis
 
+
+# Create Flask App.
 app = create_app()
 
 # For Dev: Create Tables.
