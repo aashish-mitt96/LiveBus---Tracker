@@ -17,10 +17,9 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const route = JSON.stringify([source, destination]);
         const [newTrip] = await db
             .insert(trip)
-            .values({ bus_number, source, destination, route: route as any })
+            .values({ bus_number, source, destination, route: [source, destination] })
             .returning();
 
         res.status(201).json({

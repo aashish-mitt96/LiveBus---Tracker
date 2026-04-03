@@ -3,9 +3,13 @@ import { Request, Response } from "express";
 
 
 export const liveLocation = async (req: Request, res: Response) => {
-    const { tripId, lat, lon, vel, acc } = req.body;
+    const { tripId, lat, lon, vel, acc, status } = req.body;
     if (!tripId || lat === undefined || lon === undefined) {
         return res.status(400).json({ message: "Invalid data" });
+    }
+    const validStatuses = ["moving", "stopped"];
+    if (status && !validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
     }
     try {
         const rawData = { 
