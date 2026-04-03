@@ -33,7 +33,7 @@ Configured via `VITE_BACKEND_URL` environment variable.
   "lon": "number",
   "vel": "number",
   "acc": "number",
-  "status": "type",
+  "status": "string",
 }
 ```
 

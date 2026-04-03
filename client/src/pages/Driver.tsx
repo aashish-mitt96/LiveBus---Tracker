@@ -68,6 +68,7 @@ export default function Driver() {
 
   // 2. End Trip.
   const handleEndTrip = async () => {
+    stopTracking();
     try {
       if (tripId) {
         await endTrip(tripId);
@@ -76,7 +77,6 @@ export default function Driver() {
     } catch (err) {
       console.error("End trip failed", err);
     }
-    stopTracking();
     setTripStarted(false);
     setTripId(null);
     setBusNo("");
