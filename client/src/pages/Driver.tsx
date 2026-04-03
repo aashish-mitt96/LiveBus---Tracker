@@ -23,11 +23,10 @@ export default function Driver() {
   // Tracking Hook.
   const { isTracking, busStatus, startTracking, stopTracking, lastSent, error } = useTracking(tripId);
 
-  // Add this Status Config.
   const STATUS_CONFIG = {
-    idle: { label: "Idle", color: "#5a6070", bg: "#0d0f14", border: "#1e2530" },
-    moving: { label: "🟢 Moving", color: "#4ade80", bg: "#0d1a0d", border: "#2d4a2d" },
-    stopped: { label: "🔴 Stopped", color: "#f87171", bg: "#1a0d0d", border: "#4a2d2d" },
+    idle:    { label: "Idle",      color: "#8e97ae", bg: "#f7f8fc", border: "#e2e6f0" },
+    moving:  { label: "● Moving",  color: "#065f46", bg: "#d1fae5", border: "#6ee7b7" },
+    stopped: { label: "● Stopped", color: "#7f1d1d", bg: "#fee2e2", border: "#fca5a5" },
   } as const;
 
 
@@ -40,28 +39,26 @@ export default function Driver() {
     try {
       setLoading(true);
 
-      // Wake Python Server.
       if (environment === "production") {
         await fetch(python_backend_url)
           .then(res => {
             if (!res.ok) throw new Error("Backend wake-up failed");
+            console.log("Backend woke up!");
           })
           .catch(err => {
-            console.error("Failed to wake backend... ", err);
+            console.error("Failed to wake backend:", err);
           });
       }
 
       const res = await startTrip({ busNo, source, destination });
       const tripId = res.tripId;
-      if (!tripId) {
-        throw new Error("Invalid response from server");
-      }
-      console.log("Trip Started... ", tripId);
+      if (!tripId) throw new Error("Invalid response from server");
+
+      console.log("Trip Started:", tripId);
       setTripId(tripId);
       setTripStarted(true);
-
     } catch (err) {
-      console.error("Start trip failed... ", err);
+      console.error("Start trip failed:", err);
       alert("Failed to start trip");
     } finally {
       setLoading(false);
@@ -74,10 +71,10 @@ export default function Driver() {
     try {
       if (tripId) {
         await endTrip(tripId);
-        console.log("Trip Ended... ", tripId);
+        console.log("Trip Ended:", tripId);
       }
     } catch (err) {
-      console.error("End trip failed... ", err);
+      console.error("End trip failed", err);
     }
     stopTracking();
     setTripStarted(false);
@@ -107,11 +104,12 @@ export default function Driver() {
             <div className="header-badge"><BusIcon /></div>
           </div>
 
-          {/* FORM */}
+          {/* ══ FORM VIEW ══ */}
           {!tripStarted && (
             <div className="fade-in">
-              <div className="section-label">Enter Trip Details</div>
+              <div className="section-label">Trip Details</div>
 
+              {/* Bus Number */}
               <div className="field">
                 <div className="field-inner">
                   <span className="field-icon"><BusIcon /></span>
@@ -160,19 +158,33 @@ export default function Driver() {
                 <div className="route-card fade-in">
                   <div className="route-left">
                     <div className="route-dot from" />
-                    <div style={{ height: 28, width: 1, background: "linear-gradient(#f59e0b, #2563eb)", margin: "4px 3px" }} />
+                    <div style={{
+                      height: 30,
+                      width: 1.5,
+                      background: "linear-gradient(180deg, #f59e0b 0%, #fb923c 50%, #3b82f6 100%)",
+                      margin: "5px 4px",
+                      borderRadius: 2
+                    }} />
                     <div className="route-dot to" />
                   </div>
 
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="route-label">{source}</div>
                     <div className="route-sub">Departure</div>
-                    <div style={{ margin: "6px 0", height: 1, background: "var(--border)" }} />
+                    <div style={{ margin: "8px 0", height: 1, background: "var(--border)" }} />
                     <div className="route-label">{destination}</div>
                     <div className="route-sub">Destination</div>
                   </div>
 
-                  <div style={{ color: "var(--muted)" }}>
+                  <div style={{
+                    color: "var(--muted)",
+                    background: "var(--surface2)",
+                    borderRadius: 10,
+                    padding: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    border: "1px solid var(--border)",
+                  }}>
                     <ArrowRight />
                   </div>
                 </div>
@@ -184,60 +196,92 @@ export default function Driver() {
                 onClick={handleSubmitTrip}
                 disabled={loading || !busNo || !source || !destination}
               >
-                {loading ? "Starting Trip..." : <>Start Trip <ArrowRight /></>}
+                {loading ? "Starting Trip…" : <><span>Start Trip</span> <ArrowRight /></>}
               </button>
             </div>
           )}
 
-          {/* CONTROL PANEL */}
+          {/* ══ CONTROL PANEL ══ */}
           {tripStarted && (
             <div className="control-wrap fade-in">
 
-              {/* Trip ID */}
-              <div className="trip-id-card" style={{ width: "100%" }}>
-                <div className="trip-id-label">Trip ID</div>
-                <div className="trip-id-value">
-                  <div className="trip-id-dot" />
-                  {tripId}  
-                </div>
+              {/* Trip Badge */}
+              <div className="trip-badge" style={{ width: "100%" }}>
+                <div className="trip-badge-dot" />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {tripId}
+                </span>
+                <span style={{
+                  background: "rgba(245,158,11,0.15)",
+                  borderRadius: 6,
+                  padding: "2px 8px",
+                  color: "#92400e",
+                  fontSize: 11,
+                  flexShrink: 0,
+                }}>{busNo}</span>
               </div>
 
               {/* Bus Status Pill */}
-              <div className={`status-pill ${busStatus}`}>
-                <div className="status-pill-dot" />
-                {busStatus === "moving" ? "Moving" : busStatus === "stopped" ? "Stopped" : "Idle"}
+              <div style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 20px",
+                borderRadius: 999,
+                border: `1.5px solid ${STATUS_CONFIG[busStatus].border}`,
+                background: STATUS_CONFIG[busStatus].bg,
+                color: STATUS_CONFIG[busStatus].color,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                transition: "all 0.35s ease",
+                boxShadow: "var(--shadow-sm)",
+              }}>
+                {STATUS_CONFIG[busStatus].label}
               </div>
 
-              {/* Big centered start/stop button */}
-              <div className="orb-center">
-                <div className="pulse-ring-wrap">
-                  <div className={`ring ring-1 ${isTracking ? "active" : "inactive"}`} />
-                  <div className={`ring ring-2 ${isTracking ? "active" : "inactive"}`} />
-                  <div className={`ring ring-3 ${isTracking ? "active" : "inactive"}`} />
-                  <button
-                    className={`main-btn ${isTracking ? "active" : "inactive"}`}
-                    onClick={() => { if (!tripId) return; isTracking ? stopTracking() : startTracking(); }}
-                  >
-                    {isTracking ? "STOP" : "START"}
-                  </button>
-                </div>
-
-                {/* Last sent */}
-                <div className="last-sent-row">
-                  {isTracking
-                    ? `Last sent: ${lastSent ?? 0}s ago`
-                    : busStatus === "stopped" ? "Tracking stopped" : "Not tracking"}
-                </div>
+              {/* Main Start/Stop Tracking Button with rings */}
+              <div className="pulse-ring-wrap">
+                <div className={`ring ring-1 ${isTracking ? "active" : "inactive"}`} />
+                <div className={`ring ring-2 ${isTracking ? "active" : "inactive"}`} />
+                <div className={`ring ring-3 ${isTracking ? "active" : "inactive"}`} />
+                <button
+                  className={`main-btn ${isTracking ? "active" : "inactive"}`}
+                  onClick={() => { if (!tripId) return; isTracking ? stopTracking() : startTracking(); }}
+                >
+                  <span style={{ fontSize: 22 }}>{isTracking ? "⏹" : "▶"}</span>
+                  {isTracking ? "STOP" : "START"}
+                </button>
               </div>
 
-              {error && <p style={{ color: "red", fontSize: 13 }}>{error}</p>}
+              {/* Last Sent */}
+              <div className="last-sent-row">
+                {isTracking
+                  ? `⏱ Last sent: ${lastSent ?? 0}s ago`
+                  : busStatus === "stopped" ? "Tracking paused" : "Tap START to begin tracking"}
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="error-box fade-in">
+                  <span className="error-text">⚠ {error}</span>
+                  {!isTracking && tripStarted && (
+                    <button className="resume-btn" onClick={startTracking}>
+                      Resume
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* End Trip */}
               <button className="btn-end" onClick={handleEndTrip}>
-                END TRIP
+                <span style={{ fontSize: 16 }}>⬛</span> END TRIP
               </button>
+
             </div>
           )}
+
         </div>
       </div>
     </>
