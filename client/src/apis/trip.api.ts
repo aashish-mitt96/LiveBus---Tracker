@@ -33,44 +33,43 @@ const apiRequest = async (endpoint: string, options: RequestInit) => {
 };
 
 
-
 // 1. Start Trip API.
 export const startTrip = async (
   data: { 
-    busNo:       string; 
-    source:      string; 
-    destination: string; 
+    busNo:       string,
+    source:      string, 
+    destination: string, 
+    lat:         number, 
+    lng:         number,
   }) => {
 
-  console.log("Start Trip API called with... ", data);
+  console.log("Start Trip API called with:", data);
   return apiRequest("/api/trips/start-trip", {
-
     method: "POST",
     body: JSON.stringify({
-      bus_number:  data.busNo,
+      bus_number:  data.busNo, 
       source:      data.source,
       destination: data.destination,
+      lat:         data.lat,    
+      lng:         data.lng,    
     }),
-
   });
 };
-
 
 
 // 2. Send Location API.
 export const sendLocation = async (
   data: { 
-    tripId: string; 
-    lat:    number; 
-    lon:    number; 
-    vel:    number; 
-    acc:    number; 
-    status: string; 
+    tripId: string, 
+    lat:    number, 
+    lon:    number, 
+    vel:    number, 
+    acc:    number,
+    status: string,
   }) => {
 
-  console.log("Send Live Location API called with... ", data);
+  console.log("Send Live Location API called with:", data);
   return apiRequest("/api/location/live", {
-
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -80,12 +79,15 @@ export const sendLocation = async (
 
 // 3. End Trip API.
 export const endTrip = async (
-  tripId: string,
+  tripId: string, 
+  lat:    number, 
+  lng:    number,
 ) => {
 
-  console.log("End Trip API called with... ", tripId);
+  console.log("End Trip API called with:", tripId);
   return apiRequest(`/api/trips/end-trip/${tripId}`, {
     method: "PATCH",
+    body: JSON.stringify({ lat, lng }),
   });
 };
 
@@ -101,4 +103,14 @@ export const searchBuses = async (
   return apiRequest(`/api/bus/search?source=${encodeURIComponent(source)}&destination=${encodeURIComponent(destination)}`, {
     method: "GET",
   });
+};
+
+
+
+// 5. Get Stops API
+export const getStops = async (tripId: string) => {
+    console.log("Get Stops API called with:", tripId);
+    return apiRequest(`/bus/trip/${tripId}/stops`, {
+        method: "GET",
+    });
 };
