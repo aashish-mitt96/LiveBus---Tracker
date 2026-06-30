@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { db } from '../database/dbConnection';
 import { trip } from '../database/schema/trip.schema';
 
-
 export const searchBuses = async (req: Request, res: Response) => {
   try {
     const { source, destination } = req.query;
@@ -18,25 +17,23 @@ export const searchBuses = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Source and Destination cannot be same." });
     }
 
-    // Fetch only required Fields.
     const buses = await db.select({
-      tripId:     trip.tripId,
+      tripId: trip.tripId,
       bus_number: trip.bus_number,
-      route:      trip.route,
-      status:     trip.status,
+      source: trip.source,
+      destination: trip.destination,
+      route: trip.route,
+      status: trip.status,
     }).from(trip);
 
     const filtered = buses.filter((b) => {
-      const route = Array.isArray(b.route)
-        ? b.route.map((r: string) => r.toLowerCase())
-        : [];
-
-      const sIndex = route.indexOf(s);
-      const dIndex = route.indexOf(d);
-
-      return sIndex !== -1 && dIndex !== -1 && sIndex < dIndex;
+      return (
+        b.source.toLowerCase() === s &&
+        b.destination.toLowerCase() === d
+      );
     });
 
+    // Sort active buses first
     filtered.sort((a, b) =>
       (b.status === "active" ? 1 : 0) - (a.status === "active" ? 1 : 0)
     );
