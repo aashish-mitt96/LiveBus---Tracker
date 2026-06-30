@@ -1,7 +1,7 @@
 import os
 import threading
 from src import create_app, db
-from src.database.bus import Bus
+import src.database.trips
 from src.redis.redisSubscribe import subscribe_to_redis
 
 app = create_app()

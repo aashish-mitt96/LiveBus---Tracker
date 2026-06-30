@@ -2,7 +2,7 @@ import express from 'express';
 import 'dotenv/config';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import busRoutes from './routes/user.route';
+import tripRoutes from './routes/trip.route';
 import redisRoutes from './routes/location.route';
 import userRoutes from './routes/user.route';
 import { connectRedis, redisClient } from './redis/redisConnection';
@@ -85,8 +85,8 @@ async function initRedis() {
 
 initRedis().catch(console.error);
 
-app.use("/api/redis", redisRoutes);
-app.use("/bus", busRoutes);
+app.use("/api/location", redisRoutes);
+app.use("/api/trips", tripRoutes);
 app.use("/api/bus", userRoutes);
 
 httpServer.listen(port, () => {
