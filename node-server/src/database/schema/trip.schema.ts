@@ -1,22 +1,20 @@
+import { route } from "./route.schema";
 import { createId } from "@paralleldrive/cuid2";
-import { boolean, json, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
-export type Stop = { lat: number; lng: number; stop_name: string };
 
-export const trip = pgTable('trip', {
+// Stores details of each Bus Trip.
+export const trip = pgTable("trip", {
 
-  tripId:      text('tripId').primaryKey().$defaultFn(() => createId()),
+  tripId:  text("tripId").primaryKey().$defaultFn(() => createId()),
+  routeId: text("route_id").notNull().references(() => route.routeId),
 
-  bus_number:  text('bus_number').notNull(),
-  source:      text('source').notNull(),
-  destination: text('destination').notNull(),
+  status:  text("status").default("active").notNull(),
+  current: boolean("current").notNull().default(false),
 
-  route:       json("route").$type<Stop[]>().notNull().default([]), // ✅ fixed
-
-  status:      text("status").default("active").notNull(),
-  current:     boolean("current").notNull().default(false),
-
-  createdAt:   timestamp('created_at').defaultNow().notNull(),
-  updatedAt:   timestamp('updated_at').defaultNow().$onUpdate(() => new Date()).notNull(),
-  endedAt:     timestamp("ended_at"),
+  // Timestamps.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+  endedAt:   timestamp("ended_at"),
+  
 });

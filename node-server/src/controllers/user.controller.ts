@@ -1,7 +1,10 @@
+import { sql } from "drizzle-orm";
 import { Request, Response } from "express";
-import { db } from '../database/dbConnection';
-import { trip } from '../database/schema/trip.schema';
+import { db } from "../database/dbConnection";
 
+
+
+// Search Active buses between the Given Source & Destination.
 export const searchBuses = async (req: Request, res: Response) => {
   try {
     const { source, destination } = req.query;
@@ -10,36 +13,38 @@ export const searchBuses = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid query params" });
     }
 
-    const s = source.trim().toLowerCase();
-    const d = destination.trim().toLowerCase();
+    // Normalize input for case-insensitive matching.
+    const s = `%${source.trim().toLowerCase()}%`;
+    const d = `%${destination.trim().toLowerCase()}%`;
 
+    // Prevent searching for the same stop.
     if (s === d) {
       return res.status(400).json({ error: "Source and Destination cannot be same." });
     }
 
-    const buses = await db.select({
-      tripId: trip.tripId,
-      bus_number: trip.bus_number,
-      source: trip.source,
-      destination: trip.destination,
-      route: trip.route,
-      status: trip.status,
-    }).from(trip);
+    // Find active trips where source appears before destination.
+    const result = await db.execute(sql`
+      SELECT
+        t."tripId"    AS "tripId",
+        r."routeId"   AS "routeId",
+        r.bus_number  AS bus_number,
+        r.source      AS source,
+        r.destination AS destination,
+        t.status      AS status,
+        s1.stop_name  AS board_at,
+        s2.stop_name  AS alight_at,
+        (s2.seq - s1.seq - 1) AS stops_between
+      FROM route_stop s1
+      JOIN route_stop s2 ON s1.route_id = s2.route_id AND s1.seq < s2.seq
+      JOIN route r ON r."routeId" = s1.route_id
+      JOIN trip t ON t.route_id = r."routeId"
+      WHERE s1.stop_name ILIKE ${s}
+        AND s2.stop_name ILIKE ${d}
+        AND t.status = 'active'
+      ORDER BY t."updatedAt" DESC
+    `);
 
-    const filtered = buses.filter((b) => {
-      return (
-        b.source.toLowerCase() === s &&
-        b.destination.toLowerCase() === d
-      );
-    });
-
-    // Sort active buses first
-    filtered.sort((a, b) =>
-      (b.status === "active" ? 1 : 0) - (a.status === "active" ? 1 : 0)
-    );
-
-    return res.status(200).json(filtered);
-
+    return res.status(200).json(result.rows);
   } catch (err) {
     console.error("searchBuses error:", err);
     return res.status(500).json({ error: "Internal Server Error" });
