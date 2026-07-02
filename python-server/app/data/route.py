@@ -10,12 +10,12 @@ async def get_trip_route_and_stops(trip_id: str) -> Optional[dict]:
     async with pool.acquire() as conn:
         # Get the route associated with the trip.
         trip_row = await conn.fetchrow(
-            'SELECT "routeId" FROM trip WHERE "tripId" = $1',
+            'SELECT route_id FROM trip WHERE "tripId" = $1',
             trip_id
         )
         if not trip_row:
             return None
-        route_id = trip_row["routeId"]
+        route_id = trip_row["route_id"]
 
         # Fetch all route stops in travel order.
         stop_rows = await conn.fetch(
