@@ -1,7 +1,7 @@
 import '../styles/Driver.css';
 import { useState } from "react";
 import { useTracking } from "../hooks/useTracking";
-import { startTrip, endTrip } from "../apis/trip.api";
+import { startTrip, endTrip, pinStop } from "../apis/trip.api";
 import { BusIcon, LocationPin, ArrowRight } from "../icons/svg";
 
 
@@ -36,7 +36,7 @@ export default function Driver() {
     try {
       setLoading(true);
       if (environment === "production") {
-        await fetch(python_backend_url)
+        await fetch(`${python_backend_url}/health`)
           .then(res => {
             if (!res.ok) throw new Error("Backend wake-up failed");
             console.log("Backend woke up!");
@@ -100,15 +100,8 @@ export default function Driver() {
     setPinFeedback(null);
     try {
       const { lat, lon: lng } = lastLocation;
-      const res = await fetch(`${python_backend_url}/api/trips/${tripId}/pin-stop`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat, lng }),
-      });
-      const data = await res.json();
+      const data = await pinStop(tripId, lat, lng);
       console.log("[pinStop] response:", data);
-      if (!res.ok) throw new Error(data?.error || data?.message || "Pin stop request failed");
-      console.log(`[pinStop] stop pinned at (${lat}, ${lng})`);
       setPinFeedback("success");
     } catch (err) {
       console.error("Pin stop failed:", err);

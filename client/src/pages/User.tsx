@@ -1,16 +1,17 @@
 import { useState } from "react";
 import '../styles/User.css';
-import { searchBuses } from "../apis/trip.api";
-
-type Stop = { lat: number; lng: number };
+import { searchBuses, getStops } from "../apis/trip.api";
+  
 
 type Bus = { 
-  tripId:      string;
-  bus_number:  string;
-  source:      string;
-  destination: string;
-  route:       Stop[];
-  status:      string;
+  tripId:        string;
+  bus_number:    string;
+  source:        string;
+  destination:   string;
+  status:        string;
+  board_at:      string;
+  alight_at:     string;
+  stops_between: number;
 };
 
 
@@ -58,9 +59,21 @@ export default function User() {
 
 
   // 3. Saves Route details to localStorage and navigates to the bus tracking page.
-  const handleTrack = (bus: Bus) => {
-    localStorage.setItem("trackRoute", JSON.stringify(bus.route));
-    window.location.href = `/tracker/${bus.tripId}`;
+  const handleTrack = async (bus: Bus) => {
+    try {
+      const res = await getStops(bus.tripId);
+      const stops = (res.stops || []).map((entry: any) => ({
+        lat:       entry.stop.lat,
+        lng:       entry.stop.lng,
+        stop_name: entry.stop.stopName,
+      }));
+      localStorage.setItem("trackRoute", JSON.stringify(stops));
+    } catch (err) {
+      console.error("Failed to fetch stops, tracking without route overlay:", err);
+      localStorage.removeItem("trackRoute");
+    } finally {
+      window.location.href = `/tracker/${bus.tripId}`;
+    }
   };
 
   

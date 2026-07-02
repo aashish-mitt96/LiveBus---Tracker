@@ -107,10 +107,26 @@ export const searchBuses = async (
 
 
 
-// 5. Get Stops API
+// 5. Get Stops API.
 export const getStops = async (tripId: string) => {
-    console.log("Get Stops API called with:", tripId);
-    return apiRequest(`/bus/trip/${tripId}/stops`, {
-        method: "GET",
-    });
+  console.log("Get Stops API called with:", tripId);
+  return apiRequest(`/api/trips/${tripId}/stops`, {
+    method: "GET",
+  });
+};
+
+
+
+// 6. Pin Stop API (buffer a mid-trip stop — flushed to DB only when trip ends).
+export const pinStop = async (
+  tripId: string,
+  lat:    number,
+  lng:    number,
+) => {
+
+  console.log("Pin Stop API called with:", { tripId, lat, lng });
+  return apiRequest(`/api/trips/${tripId}/pin-stop`, {
+    method: "POST",
+    body: JSON.stringify({ lat, lng }),
+  });
 };

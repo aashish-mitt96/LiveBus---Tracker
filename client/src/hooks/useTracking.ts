@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { sendLocation } from "../apis/trip.api";
 import { DEMO_ROUTE, USE_DEMO } from "../constants/demoRoute";
+import { sendLocation, pinStop as pinStopApi } from "../apis/trip.api";
 
 
 
@@ -31,11 +31,7 @@ export const useTracking = (tripId: string | null) => {
   // 1. Helper function to Pin a Stop on the Server.
   const pinStop = (lat: number, lng: number) => {
     if (!tripId) return;
-    fetch(`${import.meta.env.VITE_PYTHON_BACKEND_URL}/api/trips/${tripId}/pin-stop`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat, lng }),
-    }).catch(console.error);
+    pinStopApi(tripId, lat, lng).catch(console.error);
   };
 
 
