@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Driver from './pages/Driver';
-import TripMap from './pages/TripMap';
+import TripMap from './pages/Map';
 import User from './pages/User';
 
 function App() {
