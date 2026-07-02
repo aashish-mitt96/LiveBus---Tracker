@@ -12,6 +12,18 @@ type RawPoint = { lat: number; lon: number; ts: number };
 // Stores Recent Raw GPS Points for Each Trip.
 const busRawWindow: Record<string, RawPoint[]> = {};
 
+const tripLocks: Record<string, Promise<void>> = {};
+
+function runExclusive(tripId: string, task: () => Promise<void>): Promise<void> {
+    const prev = tripLocks[tripId] ?? Promise.resolve();
+    const next = prev
+        .catch(() => {}) 
+        .then(task);
+    tripLocks[tripId] = next;
+    return next;
+}
+
+
 
 // Snap GPS Points to the Nearest Road using LocationIQ.
 async function snapToRoad(window: RawPoint[]): Promise<{ lat: number; lon: number } | null> {
@@ -61,6 +73,14 @@ async function snapToRoad(window: RawPoint[]): Promise<{ lat: number; lon: numbe
 
 
 
+// Clear in-memory window state for a trip (call this when a trip ends).
+export function clearTripWindow(tripId: string): void {
+    delete busRawWindow[tripId];
+    delete tripLocks[tripId];
+}
+
+
+
 // Subscribe to Raw GPS updates & Process it.
 export async function initRawLocationSubscriber() {
 
@@ -68,54 +88,65 @@ export async function initRawLocationSubscriber() {
     await subscriber.connect();
 
     // Listen for Incoming GPS Data.
-    await subscriber.subscribe("raw_location", async (message) => {
-        const rawData = JSON.parse(message);
-        const tripId  = rawData.tripId;
+    await subscriber.subscribe("raw_location", (message) => {
+        (async () => {
+            let tripId: string | undefined;
+            try {
+                const rawData = JSON.parse(message);
+                tripId = rawData.tripId;
+                if (!tripId) return;
+                const ts = rawData.timestamp ?? Date.now();
 
-        if (!tripId) return; 
-        const ts = rawData.timestamp ?? Date.now();
+                await runExclusive(tripId, async () => {
+                    try {
+                        // Maintain a Sliding Window of Recent GPS Points.
+                        if (!busRawWindow[tripId!]) busRawWindow[tripId!] = [];
+                        const window = busRawWindow[tripId!];
 
-        // Maintain a Sliding Window of Recent GPS Points.
-        if (!busRawWindow[tripId]) busRawWindow[tripId] = [];
-        const window = busRawWindow[tripId];
+                        window.push({ lat: rawData.lat, lon: rawData.lon, ts });
+                        if (window.length > MATCH_WINDOW_SIZE) window.shift();
 
-        window.push({ lat: rawData.lat, lon: rawData.lon, ts });
-        if (window.length > MATCH_WINDOW_SIZE) window.shift();
+                        // Snap the Latest Point to the Road.
+                        const snapped = await snapToRoad(window);
 
-        // Snap the Latest Point to the Road.
-        const snapped = await snapToRoad(window);
+                        let lat: number, lon: number, mapMatched: boolean;
 
-        let lat: number, lon: number, mapMatched: boolean;
+                        if (snapped) {
+                            lat = snapped.lat;
+                            lon = snapped.lon;
+                            mapMatched = true;
+                        } else {
+                            // Use Raw GPS if Map Matching Fails.
+                            lat = rawData.lat;
+                            lon = rawData.lon;
+                            mapMatched = false;
+                        }
 
-        if (snapped) {
-            lat = snapped.lat;
-            lon = snapped.lon;
-            mapMatched = true;
+                        // Create Processed Location Payload.
+                        const processedData = {
+                            tripId,
+                            lat,
+                            lon,
+                            velocity:    rawData.vel ?? 0,
+                            timestamp:   ts,
+                            map_matched: mapMatched,
+                        };
 
-        } else {
-            // Use Raw GPS if Map Matching Fails.
-            lat = rawData.lat;
-            lon = rawData.lon;
-            mapMatched = false;
-        }
+                        // Store Latest Location History in Redis.
+                        const key = `trip:${tripId}:locs`;
+                        await redisClient.rPush(key, JSON.stringify({ lat, lon, ts }));
+                        await redisClient.expire(key, LOCATION_TTL_SECONDS);
 
-        // Create Processed Location Payload.
-        const processedData = {
-            tripId,
-            lat,
-            lon,
-            velocity:    rawData.vel ?? 0,
-            timestamp:   ts,
-            map_matched: mapMatched,
-        };
-
-        // Store Latest Location History in Redis.
-        const key = `trip:${tripId}:locs`;
-        await redisClient.rPush(key, JSON.stringify({ lat, lon, ts }));
-        await redisClient.expire(key, LOCATION_TTL_SECONDS);
-
-        // Publish Processed Location for Downstream Services.
-        await redisClient.publish("processed_data", JSON.stringify(processedData));
+                        // Publish Processed Location for Downstream Services.
+                        await redisClient.publish("processed_data", JSON.stringify(processedData));
+                    } catch (innerErr) {
+                        console.error(`[raw_location] failed to process message for trip ${tripId}:`, innerErr);
+                    }
+                });
+            } catch (err) {
+                console.error("[raw_location] malformed message, skipping:", err);
+            }
+        })();
     });
 
     return subscriber;

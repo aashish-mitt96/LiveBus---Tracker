@@ -30,7 +30,7 @@ export const routeStop = pgTable("route_stop", {
   id:      text("id").primaryKey().$defaultFn(() => createId()),
   routeId: text("route_id").notNull().references(() => route.routeId, { onDelete: "cascade" }),
 
-  seq:      integer("seq").notNull(),
+  seq:      doublePrecision("seq").notNull(),
   stopName: text("stop_name").notNull(),
   lat:      doublePrecision("lat").notNull(),
   lng:      doublePrecision("lng").notNull(),

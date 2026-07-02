@@ -8,6 +8,13 @@
       "when": 1782829356445,
       "tag": "0000_talented_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782997913629,
+      "tag": "0001_lyrical_revanche",
+      "breakpoints": true
     }
   ]
 }

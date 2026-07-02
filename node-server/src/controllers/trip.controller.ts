@@ -5,7 +5,8 @@ import { trip } from "../database/schema/trip.schema";
 import { flushStopsToRoute } from "../services/stops.service";
 import { route, routeStop } from "../database/schema/route.schema";
 import { findOrCreateRoute, addStopToRoute, refineDestinationCoords } from "../services/route.service";
-
+import { clearTripWindow } from "../redis/redisLocation";
+import { sendTrainingSamples } from "../services/training.service";
 
 
 // 1. Start a new trip for a bus.
@@ -27,8 +28,8 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
     // Seed terminal stops only when the route is created for the first time.
     if (isNew) {
       await db.insert(routeStop).values([
-        { routeId: routeRow.routeId, seq: 0, stopName: s, lat, lng, isTerminal: true },
-        { routeId: routeRow.routeId, seq: 1, stopName: d, lat, lng, isTerminal: true },
+        { routeId: routeRow.routeId, seq: 0, stopName: s, lat, lng, isTerminal: true, sampleCount: 1 },
+        { routeId: routeRow.routeId, seq: 1, stopName: d, lat, lng, isTerminal: true, sampleCount: 0 },
       ]);
     }
 
@@ -141,6 +142,13 @@ export async function endTrip(req: Request, res: Response): Promise<void> {
     flushStopsToRoute(tripId as string).catch(err =>
       console.error("❌ Stop flushing failed:", err)
     );
+
+    // Forward this trip's location history to the predictor service so its
+    // historical speed model can learn from it (fire-and-forget).
+    sendTrainingSamples(tripId as string, existingTrip.routeId);
+
+    // Release in-memory map-matching state now that this trip is done.
+    clearTripWindow(tripId as string);
 
     res.status(200).json({
       success:  true,

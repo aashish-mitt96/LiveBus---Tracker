@@ -9,19 +9,22 @@ export async function initRedisSubscriber() {
     await subscriber.connect();
 
     // Listen for Processed Location Updates.
-    await subscriber.subscribe("processed_data", async (message) => {
-        const processedData = JSON.parse(message);
-        console.log("Processed data received:", processedData);
+    await subscriber.subscribe("processed_data", (message) => {
+        (async () => {
+            try {
+                const processedData = JSON.parse(message);
+                const { tripId } = processedData;
+                if (!tripId) return;
 
-        const { tripId } = processedData;
+                await redisClient.set(`lastLocation:${tripId}`, JSON.stringify(processedData), { EX: 7200 });
 
-        if (tripId) {
-            await redisClient.set(`lastLocation:${tripId}`, JSON.stringify(processedData), { EX: 7200 });
-
-            // Broadcast Update to all Clients.
-            io.to(tripId).emit("locationUpdate", processedData);
-        }
+                // Broadcast Update to all Clients.
+                io.to(tripId).emit("locationUpdate", processedData);
+            } catch (err) {
+                console.error("[processed_data] malformed message, skipping:", err);
+            }
+        })();
     });
-    
+
     return subscriber;
 }
