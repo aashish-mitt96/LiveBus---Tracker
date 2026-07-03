@@ -1,9 +1,10 @@
 import { useState } from "react";
 import '../styles/User.css';
 import { searchBuses, getStops } from "../apis/trip.api";
-  
+import { BusIcon } from "../icons/svg";
 
-type Bus = { 
+
+type Bus = {
   tripId:        string;
   bus_number:    string;
   source:        string;
@@ -13,6 +14,43 @@ type Bus = {
   alight_at:     string;
   stops_between: number;
 };
+
+
+function PlannerTrack() {
+  return (
+    <svg viewBox="0 0 22 100" preserveAspectRatio="none">
+      <path
+        d="M11,8 C21,34 1,66 11,92"
+        fill="none"
+        stroke="var(--border-strong)"
+        strokeWidth="2"
+        strokeDasharray="1 6"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx="11" cy="8" r="5" fill="#fff" stroke="var(--primary)" strokeWidth="3" />
+      <circle cx="11" cy="92" r="5" fill="var(--primary)" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="9.5" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function EmptyIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M4 15c3-1 4-9 8-9s2 8 8 8" stroke="currentColor" strokeWidth="1.8" strokeDasharray="1 4" strokeLinecap="round" />
+      <path d="M16 12l4 2-4 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 
 export default function User() {
@@ -76,92 +114,82 @@ export default function User() {
     }
   };
 
-  
+
   return (
     <div className="app">
 
-      {/* NAV */}
-      <div className="nav">
-        <div className="nav-top">
-          <div className="nav-brand">
-            <div className="nav-logo">🚌</div>
-            <div className="nav-name">BusGo</div>
+      {/* ── HERO BANNER ── */}
+      <div className="hero-banner">
+        <div className="topbar">
+          <div className="brand">
+            <div className="brand-badge"><BusIcon /></div>
+            <div className="brand-name">Live<span>BUS</span></div>
           </div>
+          <div className="topbar-tag">live tracking</div>
         </div>
-        <div className="nav-greeting">Good morning,</div>
-        <div className="nav-headline">
-          Where are you<br />heading today?
-        </div>
+
+        <div className="hero-title">Where are you<br />heading today?</div>
+        <div className="hero-sub">Search a route to see which buses are running right now.</div>
       </div>
 
-      {/* SEARCH */}
-      <div className="red-bridge">
-        <div className="search-card">
+      {/* ── PLANNER CARD ── */}
+      <div className="planner-card">
+        <div className="planner-body">
+          <div className="planner-track"><PlannerTrack /></div>
 
-          <div className="field" style={{ paddingRight: 14 }}>
-            <div className="field-dot dot-from" />
-            <div className="field-inner">
-              <div className="field-label">From</div>
+          <div className="planner-fields">
+            <div className="planner-field">
+              <label>From</label>
               <input
-                className="field-input"
-                placeholder="Enter city or stop"
+                className="planner-input"
+                placeholder="Enter Source"
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
               />
             </div>
-          </div>
-
-          <div className="field-sep-wrap">
-            <div className="field-sep" />
-            <button className="swap-btn" onClick={handleSwap} title="Swap">⇅</button>
-          </div>
-
-          <div className="field" style={{ paddingRight: 14 }}>
-            <div className="field-dot dot-to" />
-            <div className="field-inner">
-              <div className="field-label">To</div>
+            <div className="planner-field">
+              <label>To</label>
               <input
-                className="field-input"
-                placeholder="Enter city or stop"
+                className="planner-input"
+                placeholder="Enter Destination"
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
               />
             </div>
           </div>
 
-          <button className="search-btn" onClick={handleSearch} disabled={loading}>
-            {loading
-              ? <><div className="spinner" /> Searching buses…</>
-              : <>Search Buses</>
-            }
-          </button>
+          <button className="planner-swap" onClick={handleSwap} title="Swap">⇅</button>
         </div>
+
+        <button className="planner-cta" onClick={handleSearch} disabled={loading}>
+          {loading ? <><div className="spinner" /> Searching…</> : <>Find buses →</>}
+        </button>
       </div>
 
-      {/* CONTENT */}
+      {/* ── CONTENT ── */}
       <div className="content">
 
         {/* Loading Skeleton */}
         {loading && [0, 1].map((i) => (
           <div className="skel-card" key={i}>
             <div className="skel-row">
-              <div className="skeleton" style={{ width: 64, height: 28 }} />
+              <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 12 }} />
               <div className="skeleton" style={{ width: 100, height: 14 }} />
               <div style={{ flex: 1 }} />
-              <div className="skeleton" style={{ width: 56, height: 22, borderRadius: 20 }} />
+              <div className="skeleton" style={{ width: 56, height: 20, borderRadius: 20 }} />
             </div>
-            <div className="skeleton" style={{ height: 12, width: "80%" }} />
-            <div className="skeleton" style={{ height: 12, width: "55%" }} />
+            <div className="skeleton" style={{ height: 14, width: "70%" }} />
+            <div className="skeleton" style={{ height: 12, width: "45%" }} />
           </div>
         ))}
 
         {/* Before Search */}
         {!searched && !loading && (
           <div className="prompt">
-            <span className="prompt-emoji">🗺️</span>
+            <div className="state-icon"><PinIcon /></div>
             <div className="prompt-title">Plan your journey</div>
             <div className="prompt-sub">
-              Enter your source & destination above<br />
+              Enter your source &amp; destination above<br />
               to find buses on your route
             </div>
           </div>
@@ -171,15 +199,15 @@ export default function User() {
         {searched && !loading && (
           <>
             <div className="section-header">
-              <div className="section-title">Available Buses</div>
+              <div className="section-title">Available buses</div>
               {filteredBuses.length > 0 && (
-                <div className="section-badge">{filteredBuses.length} found</div>
+                <div className="section-count">{String(filteredBuses.length).padStart(2, "0")} found</div>
               )}
             </div>
 
             {filteredBuses.length === 0 ? (
               <div className="empty">
-                <span className="empty-emoji">😕</span>
+                <div className="state-icon"><EmptyIcon /></div>
                 <div className="empty-title">No buses found</div>
                 <div className="empty-sub">
                   No buses available on this route.<br />
@@ -190,57 +218,52 @@ export default function User() {
               filteredBuses.map((bus, i) => (
                 <div
                   key={bus.tripId}
-                  className="bus-card"
-                  style={{
-                    animationDelay: `${i * 70}ms`,
-                    cursor: "pointer",
-                    opacity: bus.status === "active" ? 1 : 0.6
-                  }}
+                  className="bus-card fade-in"
+                  style={{ animationDelay: `${i * 70}ms` }}
                   onClick={() => handleTrack(bus)}
                 >
-                  <div className="bus-card-head">
-                    <div className="bus-left">
-                      <div className="bus-num-badge">{bus.bus_number}</div>
+                  <div className="bus-card-top">
+                    <div className="bus-id">
+                      <div className="bus-id-badge">
+                        {bus.bus_number.replace(/[^A-Z0-9]/gi, "").slice(0, 4)}
+                      </div>
                       <div>
-                        <div className="bus-trip">TRIP #{bus.tripId}</div>
-                        <div className="bus-type">Express Bus</div>
+                        <div className="bus-trip-code">TRIP #{bus.tripId}</div>
+                        <div className="bus-number">{bus.bus_number}</div>
                       </div>
                     </div>
 
                     <div className={`status-pill ${bus.status === "active" ? "active" : "inactive"}`}>
                       <div className="status-dot" />
-                      {bus.status === "active" ? "Live" : "Offline"}
+                      {bus.status === "active" ? "LIVE" : "OFFLINE"}
                     </div>
                   </div>
 
-                  {/* SOURCE & DESTINATION */}
-                  <div className="bus-card-body">
-                    <div className="timeline-row">
-                      <div className="timeline-track">
-                        <div className="t-dot t-dot-src" />
-                        <div className="t-line" />
-                      </div>
-                      <div className="timeline-stop">
-                        <div className="stop-name-main">
-                          {bus.source}
-                          <span className="stop-tag stop-tag-src">Boarding</span>
-                        </div>
-                      </div>
+                  <div className="route-row">
+                    <div className="route-city">{bus.source}</div>
+                    <div className="route-connector">
+                      <div className="route-chip"><BusIcon /></div>
                     </div>
-
-                    <div className="timeline-row">
-                      <div className="timeline-track">
-                        <div className="t-dot t-dot-dst" />
-                      </div>
-                      <div className="timeline-stop" style={{ paddingBottom: 0 }}>
-                        <div className="stop-name-main is-dst">
-                          {bus.destination}
-                          <span className="stop-tag stop-tag-dst">Drop</span>
-                        </div>
-                      </div>
-                    </div>
+                    <div className="route-city">{bus.destination}</div>
                   </div>
 
+                  <div className="bus-stats">
+                    <div className="bus-stats-group">
+                      <div className="bus-stat">
+                        <span className="bus-stat-label">Board</span>
+                        <span className="bus-stat-value">{bus.board_at || "—"}</span>
+                      </div>
+                      <div className="bus-stat">
+                        <span className="bus-stat-label">Stops</span>
+                        <span className="bus-stat-value">{bus.stops_between}</span>
+                      </div>
+                      <div className="bus-stat">
+                        <span className="bus-stat-label">Alight</span>
+                        <span className="bus-stat-value">{bus.alight_at || "—"}</span>
+                      </div>
+                    </div>
+                    <div className="bus-stats-arrow">→</div>
+                  </div>
                 </div>
               ))
             )}

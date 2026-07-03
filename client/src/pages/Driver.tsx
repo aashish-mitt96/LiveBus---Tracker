@@ -161,7 +161,7 @@ export default function Driver() {
           {!tripStarted && (
             <div className="fade-in">
 
-              <div className="field">
+              <div className="field" >
                 <div className="field-inner">
                   <span className="field-icon"><BusIcon /></span>
                   <div className="field-vr" />

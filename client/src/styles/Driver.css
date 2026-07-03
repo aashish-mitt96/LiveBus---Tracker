@@ -127,7 +127,7 @@ body {
 .page-subtitle {
   font-size: 13px;
   color: var(--muted);
-  margin-bottom: 18px;
+  margin-bottom: 30px;
   line-height: 1.4;
 }
 
@@ -195,7 +195,7 @@ body {
 
 /* ── INPUT FIELD ── */
 .field {
-  margin-bottom: 4px;
+  margin-bottom: 20px;
 }
 
 .field-origin {
