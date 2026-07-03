@@ -173,51 +173,41 @@ export default function BusTracker() {
 
     setRouteStopCount(stops.length);
 
-    const simpleIcon = L.divIcon({
+    const stopIcon = L.divIcon({
       className: "",
-      html: `<div style="
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  ">
-    <div style="
-      width: 14px; height: 14px;
-      background: #facc15;
-      border-radius: 50%;
-      border: 2px solid #0d0f14;
-      box-shadow: 0 0 6px #facc1588;
-    "></div>
-    <div style="
-      width: 2px;
-      height: 8px;
-      background: #facc15;
-      opacity: 0.8;
-    "></div>
-  </div>`,
-      iconSize: [14, 22],
-      iconAnchor: [7, 22],
+      html: `
+        <svg width="26" height="36" viewBox="0 0 26 36" xmlns="http://www.w3.org/2000/svg" style="display:block; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));">
+          <path
+            d="M13 0C5.82 0 0 5.82 0 13c0 9.75 13 23 13 23s13-13.25 13-23C26 5.82 20.18 0 13 0z"
+            fill="#ea4335"
+          />
+          <circle cx="13" cy="13" r="5.5" fill="#ffffff"/>
+        </svg>`,
+      iconSize: [26, 36],
+      iconAnchor: [13, 36],
+      popupAnchor: [0, -32],
     });
 
     const latLngs: LatLng[] = stops.map((s) => [s.lat, s.lng]);
 
     stops.forEach((stop, i) => {
-      const marker = L.marker([stop.lat, stop.lng], { icon: simpleIcon })
+      const marker = L.marker([stop.lat, stop.lng], { icon: stopIcon })
         .addTo(map)
         .bindPopup(
-          `<div style="font-family:'DM Mono',monospace; min-width:170px; background:#0d0f14; border:1px solid #1f2430; border-radius:10px; padding:10px 14px; box-shadow:0 8px 24px rgba(0,0,0,0.45);">
+          `<div style="font-family:'DM Mono',monospace; min-width:170px; background:#ffffff; border:1px solid #dadce0; border-radius:10px; padding:10px 14px; box-shadow:0 2px 8px rgba(60,64,67,0.2);">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-          <div style="width:20px; height:20px; border-radius:50%; background:#3b82f6; color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <div style="width:20px; height:20px; border-radius:50%; background:#ea4335; color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
             ${i + 1}
           </div>
-          <span style="color:#e8e6e0; font-size:13px; font-weight:600; letter-spacing:0.02em;">
+          <span style="color:#202124; font-size:13px; font-weight:600; letter-spacing:0.02em;">
             Stop ${i + 1}
           </span>
         </div>
-        <div style="color:#5a6070; font-size:11px; padding-left:28px; line-height:1.4;">
+        <div style="color:#5f6368; font-size:11px; padding-left:28px; line-height:1.4;">
           ${stop.stop_name}
         </div>
       </div>`,
-          { className: 'dark-popup', closeButton: false, offset: [0, -8] }
+          { className: 'light-popup', closeButton: false, offset: [0, -8] }
         );
       stopMarkersRef.current.push(marker);
     });
@@ -604,7 +594,7 @@ export default function BusTracker() {
             {connected ? "● Live" : "○ Disconnected"}
           </span>
           {tripId && (
-            <span className="smt-badge" style={{ background: "#1a1f2f", borderColor: "#2d3a5a", color: "#93c5fd" }}>
+            <span className="smt-badge" style={{ background: "#e8f0fe", borderColor: "#c6dafc", color: "#1a73e8" }}>
               room: {tripId.slice(-8)}
             </span>
           )}
@@ -630,7 +620,7 @@ export default function BusTracker() {
                 {lastUpdate.vel != null && (
                   <div className="smt-overlay-meta">vel: {lastUpdate.vel} km/h</div>
                 )}
-                <div className="smt-overlay-meta" style={{ marginTop: 6, color: "#3a4050" }}>
+                <div className="smt-overlay-meta" style={{ marginTop: 6, color: "#80868b" }}>
                   {new Date(lastUpdate.timestamp).toLocaleTimeString()}
                 </div>
               </div>
@@ -639,7 +629,7 @@ export default function BusTracker() {
             {status === "riding" && (
               <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
                 <div className="pulse-dot" />
-                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: "#4ade80" }}>
+                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: "#1a73e8" }}>
                   animating…
                 </span>
               </div>
@@ -651,19 +641,11 @@ export default function BusTracker() {
         {routeStopCount > 0 && (
           <div className="smt-legend">
             <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#4ade80" }} />
-              Start
+              <div className="smt-legend-dot" style={{ borderColor: "#ea4335", background: "rgba(234,67,53,0.15)" }} />
+              Stop ({routeStopCount})
             </div>
             <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#facc15" }} />
-              Stops ({routeStopCount - 2})
-            </div>
-            <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#f87171" }} />
-              End
-            </div>
-            <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#4ade80", background: "rgba(74,222,128,0.15)" }} />
+              <div className="smt-legend-dot" style={{ borderColor: "#34a853", background: "rgba(52,168,83,0.15)" }} />
               Bus
             </div>
           </div>
