@@ -2,8 +2,8 @@
 
 .smt-root {
   font-family: "Syne", sans-serif;
-  background: #f8f9fa;
-  color: #202124;
+  background: #0d0f14;
+  color: #e8e6e0;
   min-height: 100vh;
   padding: 24px;
   box-sizing: border-box;
@@ -18,23 +18,23 @@
 .smt-title {
   font-size: 22px;
   font-weight: 700;
-  color: #202124;
+  color: #e8e6e0;
   letter-spacing: -0.5px;
   margin: 0;
 }
 .smt-badge {
   font-family: "DM Mono", monospace;
   font-size: 11px;
-  background: #e6f4ea;
-  color: #188038;
-  border: 1px solid #ceead6;
+  background: #1a2f1a;
+  color: #4ade80;
+  border: 1px solid #2d4a2d;
   padding: 3px 8px;
   border-radius: 4px;
 }
 .smt-badge.disconnected {
-  background: #fce8e6;
-  color: #c5221f;
-  border-color: #fad2cf;
+  background: #2f1a1a;
+  color: #f87171;
+  border-color: #4a2d2d;
 }
 
 .smt-back-btn {
@@ -43,9 +43,9 @@
   font-weight: 500;
   padding: 4px 12px;
   border-radius: 6px;
-  border: 1px solid #dadce0;
-  background: #ffffff;
-  color: #5f6368;
+  border: 1px solid #1e2530;
+  background: transparent;
+  color: #8a9aaa;
   cursor: pointer;
   transition:
     border-color 0.2s,
@@ -56,16 +56,15 @@
   margin-left: auto;
 }
 .smt-back-btn:hover {
-  border-color: #1a73e8;
-  color: #1a73e8;
+  border-color: #4ade80;
+  color: #4ade80;
 }
 
 .smt-map-wrap {
   position: relative;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #dadce0;
-  box-shadow: 0 1px 6px rgba(60, 64, 67, 0.15);
+  border: 1px solid #1e2530;
 }
 .smt-map-div {
   width: 100%;
@@ -76,19 +75,18 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(13, 15, 20, 0.9);
   backdrop-filter: blur(8px);
-  border: 1px solid #dadce0;
+  border: 1px solid #1e2530;
   border-radius: 10px;
   padding: 12px 16px;
   min-width: 190px;
   z-index: 1000;
-  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.2);
 }
 .smt-overlay-label {
   font-family: "DM Mono", monospace;
   font-size: 10px;
-  color: #5f6368;
+  color: #5a6070;
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 4px;
@@ -97,24 +95,24 @@
   font-family: "DM Mono", monospace;
   font-size: 16px;
   font-weight: 500;
-  color: #1a73e8;
+  color: #4ade80;
   line-height: 1.4;
 }
 .smt-overlay-row {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid #1e2530;
 }
 .smt-overlay-meta {
   font-family: "DM Mono", monospace;
   font-size: 11px;
-  color: #5f6368;
+  color: #5a6070;
   margin-top: 3px;
 }
 .smt-overlay-tripid {
   font-family: "DM Mono", monospace;
   font-size: 10px;
-  color: #1a73e8;
+  color: #4ade80;
   margin-top: 6px;
   word-break: break-all;
 }
@@ -130,30 +128,30 @@
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 20px;
-  border: 1px solid #dadce0;
-  background: #ffffff;
-  color: #5f6368;
+  border: 1px solid #1e2530;
+  background: #0d0f14;
+  color: #5a6070;
 }
 .smt-chip.active {
-  border-color: #34a853;
-  color: #188038;
-  background: #e6f4ea;
+  border-color: #4ade80;
+  color: #4ade80;
+  background: #0d1a0d;
 }
 .smt-chip.waiting {
-  border-color: #fbbc04;
-  color: #a86400;
-  background: #fef7e0;
+  border-color: #facc15;
+  color: #facc15;
+  background: #1a1800;
 }
 .smt-chip.error {
-  border-color: #ea4335;
-  color: #c5221f;
-  background: #fce8e6;
+  border-color: #f87171;
+  color: #f87171;
+  background: #1a0d0d;
 }
 
 .smt-log {
   margin-top: 14px;
-  background: #ffffff;
-  border: 1px solid #dadce0;
+  background: #080a0f;
+  border: 1px solid #1e2530;
   border-radius: 8px;
   padding: 10px 14px;
   max-height: 140px;
@@ -162,7 +160,7 @@
 .smt-log-title {
   font-family: "DM Mono", monospace;
   font-size: 10px;
-  color: #5f6368;
+  color: #5a6070;
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 6px;
@@ -170,11 +168,11 @@
 .smt-log-entry {
   font-family: "DM Mono", monospace;
   font-size: 11px;
-  color: #5f6368;
+  color: #5a6070;
   line-height: 1.8;
 }
 .smt-log-entry.new {
-  color: #1a73e8;
+  color: #4ade80;
 }
 
 .smt-legend {
@@ -189,7 +187,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #5f6368;
+  color: #5a6070;
 }
 .smt-legend-dot {
   width: 12px;
@@ -199,33 +197,22 @@
   flex-shrink: 0;
 }
 
-/* Light, Google-Maps-style basemap — no filter/inversion needed, OSM tiles
-   are already light; we just theme the surrounding chrome to match. */
 .smt-map-wrap .leaflet-container {
-  background: #e8eaed;
+  background: #1a1d24;
+}
+.smt-map-wrap .leaflet-tile {
+  filter: invert(0.92) hue-rotate(180deg) brightness(0.85) saturate(0.8);
 }
 .smt-map-wrap .leaflet-control-zoom a {
-  background: #ffffff !important;
-  color: #202124 !important;
-  border-color: #dadce0 !important;
+  background: #0d0f14 !important;
+  color: #e8e6e0 !important;
+  border-color: #1e2530 !important;
 }
 .smt-map-wrap .leaflet-control-zoom a:hover {
-  background: #f1f3f4 !important;
+  background: #1e2530 !important;
 }
 .smt-map-wrap .leaflet-control-attribution {
   display: none;
-}
-.smt-map-wrap .leaflet-popup-content-wrapper {
-  background: transparent;
-  box-shadow: none;
-  border-radius: 10px;
-}
-.smt-map-wrap .leaflet-popup-tip {
-  background: #ffffff;
-  box-shadow: 0 2px 6px rgba(60, 64, 67, 0.2);
-}
-.smt-map-wrap .leaflet-popup-content {
-  margin: 0;
 }
 
 .smt-bike-icon {
@@ -239,17 +226,17 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #1a73e8;
+  background: #4ade80;
   animation: pulse 1.5s infinite;
 }
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.6);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(26, 115, 232, 0);
+    box-shadow: 0 0 0 8px rgba(74, 222, 128, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
   }
 }

@@ -136,7 +136,7 @@ export default function Driver() {
           {/* ── TOP BAR ── */}
           <div className="top-bar">
             <div className="app-wordmark">
-              <span className="app-wordmark-my">My</span>
+              <span className="app-wordmark-my">Live</span>
               <span className="app-wordmark-bus">BUS</span>
             </div>
             <div className="header-badge"><BusIcon /></div>

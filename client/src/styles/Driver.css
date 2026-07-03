@@ -197,6 +197,11 @@ body {
 .field {
   margin-bottom: 4px;
 }
+
+.field-origin {
+  margin-bottom: -8px;
+}
+
 .field-inner {
   background: var(--surface);
   border: 1px solid var(--border);
