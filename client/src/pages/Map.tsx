@@ -4,6 +4,7 @@ import L from "leaflet";
 import type { Map, Marker, Polyline } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { io, Socket } from "socket.io-client";
+import { getStops } from "../apis/trip.api";
 import '../styles/Map.css';
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -155,9 +156,8 @@ export default function BusTracker() {
     });
   }, []);
 
-  // ── draw route stops from localStorage ──────────────────────────────────
-  // ── draw route stops from localStorage ──────────────────────────────────
-  const drawRouteStops = useCallback(() => {
+  // ── render stop markers on the map (pure — no fetching here) ─────────────
+  const renderStops = useCallback((stops: Stop[]) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -167,22 +167,6 @@ export default function BusTracker() {
     if (routeLayerRef.current) {
       map.removeLayer(routeLayerRef.current);
       routeLayerRef.current = null;
-    }
-
-    const raw = localStorage.getItem("trackRoute");
-    if (!raw) {
-      addLog(`[${new Date().toLocaleTimeString()}] No route found in localStorage.`);
-      return;
-    }
-
-    let stops: Stop[] = [];
-    try {
-      stops = (JSON.parse(raw) as (Stop | null)[]).filter(
-        (s): s is Stop => s !== null && s.lat != null && s.lng != null
-      );
-    } catch {
-      addLog(`[${new Date().toLocaleTimeString()}] Failed to parse route.`);
-      return;
     }
 
     if (!stops.length) return;
@@ -241,6 +225,55 @@ export default function BusTracker() {
     map.fitBounds(latLngs as L.LatLngBoundsExpression, { padding: [40, 40] });
     addLog(`[${new Date().toLocaleTimeString()}] Loaded ${stops.length} stops from route.`);
   }, [addLog]);
+
+  // ── load route stops: fetch from the server first (source of truth) ──────
+  // On repeat runs the driver reuses the same bus/source/destination, so the
+  // backend returns the same routeId's stops carried over from prior trips —
+  // fetch those immediately so the map is populated before any new pings
+  // arrive, instead of waiting for the route to be re-discovered from scratch.
+  // Falls back to whatever was cached in localStorage (set by the User page's
+  // search flow) only if the fetch fails, e.g. offline.
+  const loadRouteStops = useCallback(async () => {
+    if (tripId) {
+      try {
+        const res = await getStops(tripId);
+        const stops: Stop[] = (res.stops || [])
+          .map((entry: any) => ({
+            lat:       entry.stop.lat,
+            lng:       entry.stop.lng,
+            stop_name: entry.stop.stopName,
+          }))
+          .filter((s: Stop) => s.lat != null && s.lng != null);
+
+        localStorage.setItem("trackRoute", JSON.stringify(stops));
+        renderStops(stops);
+        addLog(`[${new Date().toLocaleTimeString()}] Fetched ${stops.length} stops from server for this route.`);
+        return;
+      } catch (err) {
+        console.error("Failed to fetch stops from server, falling back to cached route:", err);
+        addLog(`[${new Date().toLocaleTimeString()}] Could not fetch stops from server, using cached route.`);
+      }
+    }
+
+    const raw = localStorage.getItem("trackRoute");
+    if (!raw) {
+      addLog(`[${new Date().toLocaleTimeString()}] No route found in localStorage.`);
+      return;
+    }
+
+    let stops: Stop[] = [];
+    try {
+      stops = (JSON.parse(raw) as (Stop | null)[]).filter(
+        (s): s is Stop => s !== null && s.lat != null && s.lng != null
+      );
+    } catch {
+      addLog(`[${new Date().toLocaleTimeString()}] Failed to parse route.`);
+      return;
+    }
+
+    renderStops(stops);
+  }, [tripId, renderStops, addLog]);
+
 
   // ── reset map state ──────────────────────────────────────────────────────
   const resetMapState = useCallback(() => {
@@ -488,14 +521,14 @@ export default function BusTracker() {
 
     // ✅ map.whenReady guarantees the map is fully initialised before drawing
     map.whenReady(() => {
-      drawRouteStops();
+      loadRouteStops();
     });
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [drawRouteStops]);
+  }, [loadRouteStops]);
 
   // ── Socket.IO ────────────────────────────────────────────────────────────
   useEffect(() => {
