@@ -254,10 +254,6 @@ export default function User() {
                         <span className="bus-stat-value">{bus.board_at || "—"}</span>
                       </div>
                       <div className="bus-stat">
-                        <span className="bus-stat-label">Stops</span>
-                        <span className="bus-stat-value">{bus.stops_between}</span>
-                      </div>
-                      <div className="bus-stat">
                         <span className="bus-stat-label">Alight</span>
                         <span className="bus-stat-value">{bus.alight_at || "—"}</span>
                       </div>

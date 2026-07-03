@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import L from "leaflet";
 import type { Map, Marker, Polyline } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -10,7 +10,7 @@ import '../styles/Map.css';
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type LatLng = [number, number];
-type Stop = { lat: number; lng: number, stop_name: string };
+type Stop = { lat: number; lng: number; stop_name: string; seq: number };
 
 type Status = "idle" | "connecting" | "riding" | "waiting" | "stopped" | "last_known";
 
@@ -32,7 +32,7 @@ const SLOT_MS = 10_000;
 const STATUS_LABELS: Record<Status, string> = {
   idle: "Waiting for connection…",
   connecting: "Connecting…",
-  riding: "Bus moving",
+  riding: "Animating…",
   waiting: "Waiting for next location…",
   stopped: "Bus stopped",
   last_known: "Showing last known location",
@@ -81,16 +81,12 @@ function bearing(from: LatLng, to: LatLng): number {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-
-// ── log entry type ────────────────────────────────────────────────────────────
-
-interface LogEntry {
-  id: number;
-  text: string;
-  isNew: boolean;
+/** Sort a stop list by its `seq` (double precision) field, ascending. */
+function sortBySeq(stops: Stop[]): Stop[] {
+  return [...stops].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
 }
 
-// ── bus marker icon ───────────────────────────────────────────────────────────
+// ── bus marker icon (Google Maps style — blue live-location puck) ─────────────
 
 function makeBusIcon(opacity = 1) {
   return L.divIcon({
@@ -98,15 +94,15 @@ function makeBusIcon(opacity = 1) {
     html: `
       <div class="smt-bike-icon" style="opacity:${opacity};width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
         <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="20" cy="20" r="18" fill="rgba(74,222,128,0.15)" stroke="#4ade80" stroke-width="1.5"/>
+          <circle cx="20" cy="20" r="18" fill="rgba(26,115,232,0.15)" stroke="#1a73e8" stroke-width="1.5"/>
           <polygon
             points="20,6 30,30 20,25 10,30"
-            fill="#4ade80"
-            stroke="#0d0f14"
+            fill="#1a73e8"
+            stroke="#ffffff"
             stroke-width="1.5"
             stroke-linejoin="round"
           />
-          <circle cx="20" cy="20" r="2.5" fill="#0d0f14"/>
+          <circle cx="20" cy="20" r="2.5" fill="#ffffff"/>
         </svg>
       </div>`,
     iconSize: [40, 40],
@@ -114,11 +110,63 @@ function makeBusIcon(opacity = 1) {
   });
 }
 
+// ── stop marker icons (regular / source / destination) ────────────────────────
+
+function makeStopIcon(kind: "source" | "destination" | "mid", label: number) {
+  if (kind === "source") {
+    return L.divIcon({
+      className: "",
+      html: `
+        <div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(60,64,67,0.3));">
+          <svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 25 15 25s15-13.75 15-25C30 6.72 23.28 0 15 0z" fill="#34a853"/>
+            <circle cx="15" cy="15" r="10.5" fill="#ffffff"/>
+            <path d="M10 15.5l3.2 3.2L20.5 11" stroke="#34a853" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>`,
+      iconSize: [30, 40],
+      iconAnchor: [15, 40],
+      popupAnchor: [0, -36],
+    });
+  }
+  if (kind === "destination") {
+    return L.divIcon({
+      className: "",
+      html: `
+        <div style="filter:drop-shadow(0 2px 4px rgba(60,64,67,0.3));">
+          <svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 25 15 25s15-13.75 15-25C30 6.72 23.28 0 15 0z" fill="#ea4335"/>
+            <circle cx="15" cy="15" r="10.5" fill="#ffffff"/>
+            <g transform="translate(9.5,9)">
+              <rect width="1.6" height="12.5" fill="#ea4335"/>
+              <path d="M1.6 0h9l-2.2 2.6 2.2 2.6h-9z" fill="#ea4335"/>
+            </g>
+          </svg>
+        </div>`,
+      iconSize: [30, 40],
+      iconAnchor: [15, 40],
+      popupAnchor: [0, -36],
+    });
+  }
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="filter:drop-shadow(0 1px 3px rgba(60,64,67,0.25));">
+        <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="11" fill="#1a73e8" stroke="#ffffff" stroke-width="2"/>
+          <text x="12" y="16" text-anchor="middle" font-family="DM Mono, monospace" font-size="10" font-weight="600" fill="#ffffff">${label}</text>
+        </svg>
+      </div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12],
+  });
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function BusTracker() {
   const { tripId } = useParams<{ tripId: string }>();
-  const navigate = useNavigate();
 
   // ── map refs ────────────────────────────────────────────────────────────
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -142,22 +190,23 @@ export default function BusTracker() {
 
   // ── ui state ────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<Status>("idle");
-  const [connected, setConnected] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<LocationUpdate | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [routeStopCount, setRouteStopCount] = useState(0);
-  const logCountRef = useRef(0);
+  const [stops, setStops] = useState<Stop[]>([]);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return (localStorage.getItem("smtTheme") as "light" | "dark") || "light";
+  });
 
-  const addLog = useCallback((text: string) => {
-    const id = ++logCountRef.current;
-    setLogs((prev) => {
-      const updated = prev.map((e) => ({ ...e, isNew: false }));
-      return [...updated, { id, text, isNew: true }].slice(-20);
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      localStorage.setItem("smtTheme", next);
+      return next;
     });
   }, []);
 
   // ── render stop markers on the map (pure — no fetching here) ─────────────
-  const renderStops = useCallback((stops: Stop[]) => {
+  // `stopList` must already be sorted by `seq` before being passed in.
+  const renderStops = useCallback((stopList: Stop[]) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -169,38 +218,28 @@ export default function BusTracker() {
       routeLayerRef.current = null;
     }
 
-    if (!stops.length) return;
+    if (!stopList.length) return;
 
-    setRouteStopCount(stops.length);
+    setStops(stopList);
 
-    const stopIcon = L.divIcon({
-      className: "",
-      html: `
-        <svg width="26" height="36" viewBox="0 0 26 36" xmlns="http://www.w3.org/2000/svg" style="display:block; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));">
-          <path
-            d="M13 0C5.82 0 0 5.82 0 13c0 9.75 13 23 13 23s13-13.25 13-23C26 5.82 20.18 0 13 0z"
-            fill="#ea4335"
-          />
-          <circle cx="13" cy="13" r="5.5" fill="#ffffff"/>
-        </svg>`,
-      iconSize: [26, 36],
-      iconAnchor: [13, 36],
-      popupAnchor: [0, -32],
-    });
+    const latLngs: LatLng[] = stopList.map((s) => [s.lat, s.lng]);
+    const lastIdx = stopList.length - 1;
 
-    const latLngs: LatLng[] = stops.map((s) => [s.lat, s.lng]);
+    stopList.forEach((stop, i) => {
+      const kind: "source" | "destination" | "mid" =
+        i === 0 ? "source" : i === lastIdx ? "destination" : "mid";
+      const icon = makeStopIcon(kind, i + 1);
 
-    stops.forEach((stop, i) => {
-      const marker = L.marker([stop.lat, stop.lng], { icon: stopIcon })
+      const marker = L.marker([stop.lat, stop.lng], { icon })
         .addTo(map)
         .bindPopup(
           `<div style="font-family:'DM Mono',monospace; min-width:170px; background:#ffffff; border:1px solid #dadce0; border-radius:10px; padding:10px 14px; box-shadow:0 2px 8px rgba(60,64,67,0.2);">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-          <div style="width:20px; height:20px; border-radius:50%; background:#ea4335; color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <div style="width:20px; height:20px; border-radius:50%; background:${kind === "source" ? "#34a853" : kind === "destination" ? "#ea4335" : "#1a73e8"}; color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
             ${i + 1}
           </div>
           <span style="color:#202124; font-size:13px; font-weight:600; letter-spacing:0.02em;">
-            Stop ${i + 1}
+            ${kind === "source" ? "Source" : kind === "destination" ? "Destination" : `Stop ${i + 1}`}
           </span>
         </div>
         <div style="color:#5f6368; font-size:11px; padding-left:28px; line-height:1.4;">
@@ -213,57 +252,48 @@ export default function BusTracker() {
     });
 
     map.fitBounds(latLngs as L.LatLngBoundsExpression, { padding: [40, 40] });
-    addLog(`[${new Date().toLocaleTimeString()}] Loaded ${stops.length} stops from route.`);
-  }, [addLog]);
+  }, []);
 
   // ── load route stops: fetch from the server first (source of truth) ──────
-  // On repeat runs the driver reuses the same bus/source/destination, so the
-  // backend returns the same routeId's stops carried over from prior trips —
-  // fetch those immediately so the map is populated before any new pings
-  // arrive, instead of waiting for the route to be re-discovered from scratch.
-  // Falls back to whatever was cached in localStorage (set by the User page's
-  // search flow) only if the fetch fails, e.g. offline.
   const loadRouteStops = useCallback(async () => {
     if (tripId) {
       try {
         const res = await getStops(tripId);
-        const stops: Stop[] = (res.stops || [])
-          .map((entry: any) => ({
-            lat:       entry.stop.lat,
-            lng:       entry.stop.lng,
-            stop_name: entry.stop.stopName,
-          }))
-          .filter((s: Stop) => s.lat != null && s.lng != null);
+        const stopList: Stop[] = sortBySeq(
+          (res.stops || [])
+            .map((entry: any) => ({
+              lat:       entry.stop.lat,
+              lng:       entry.stop.lng,
+              stop_name: entry.stop.stopName,
+              seq:       entry.stop.seq,
+            }))
+            .filter((s: Stop) => s.lat != null && s.lng != null)
+        );
 
-        localStorage.setItem("trackRoute", JSON.stringify(stops));
-        renderStops(stops);
-        addLog(`[${new Date().toLocaleTimeString()}] Fetched ${stops.length} stops from server for this route.`);
+        localStorage.setItem("trackRoute", JSON.stringify(stopList));
+        renderStops(stopList);
         return;
       } catch (err) {
         console.error("Failed to fetch stops from server, falling back to cached route:", err);
-        addLog(`[${new Date().toLocaleTimeString()}] Could not fetch stops from server, using cached route.`);
       }
     }
 
     const raw = localStorage.getItem("trackRoute");
-    if (!raw) {
-      addLog(`[${new Date().toLocaleTimeString()}] No route found in localStorage.`);
-      return;
-    }
+    if (!raw) return;
 
-    let stops: Stop[] = [];
+    let stopList: Stop[] = [];
     try {
-      stops = (JSON.parse(raw) as (Stop | null)[]).filter(
-        (s): s is Stop => s !== null && s.lat != null && s.lng != null
+      stopList = sortBySeq(
+        (JSON.parse(raw) as (Stop | null)[]).filter(
+          (s): s is Stop => s !== null && s.lat != null && s.lng != null
+        )
       );
     } catch {
-      addLog(`[${new Date().toLocaleTimeString()}] Failed to parse route.`);
       return;
     }
 
-    renderStops(stops);
-  }, [tripId, renderStops, addLog]);
-
+    renderStops(stopList);
+  }, [tripId, renderStops]);
 
   // ── reset map state ──────────────────────────────────────────────────────
   const resetMapState = useCallback(() => {
@@ -292,7 +322,6 @@ export default function BusTracker() {
     currentPosRef.current = null;
     routePointsRef.current = [];
     cumulDistRef.current = [];
-    setLastUpdate(null);
     setStatus("waiting");
   }, []);
 
@@ -303,24 +332,12 @@ export default function BusTracker() {
 
     if (joinedRoomRef.current && joinedRoomRef.current !== id) {
       socket.emit("stopTrackBus", joinedRoomRef.current);
-      addLog(`[${new Date().toLocaleTimeString()}] Left room: ${joinedRoomRef.current}`);
       resetMapState();
     }
 
     socket.emit("trackBus", id);
     joinedRoomRef.current = id;
-    addLog(`[${new Date().toLocaleTimeString()}] Joined room: ${id} — waiting for updates…`);
-  }, [addLog, resetMapState]);
-
-  // ── leave room → go back home ────────────────────────────────────────────
-  const handleLeave = useCallback(() => {
-    const socket = socketRef.current;
-    if (socket && joinedRoomRef.current) {
-      socket.emit("stopTrackBus", joinedRoomRef.current);
-    }
-    joinedRoomRef.current = null;
-    navigate("/");
-  }, [navigate]);
+  }, [resetMapState]);
 
   // ── stop animation ───────────────────────────────────────────────────────
   const stopAnimation = useCallback(() => {
@@ -451,14 +468,13 @@ export default function BusTracker() {
             markerRef.current = L.marker(newPos, { icon: makeBusIcon() }).addTo(map);
           }
         }
-        addLog(`[${new Date().toLocaleTimeString()}] First point set. Waiting for next location…`);
       } else {
         animateSegmentRef.current(currentPosRef.current, newPos);
       }
 
       scheduleNextRef.current();
     }, delay);
-  }, [addLog]);
+  }, []);
 
   useEffect(() => { scheduleNextRef.current = scheduleNext; }, [scheduleNext]);
 
@@ -478,9 +494,6 @@ export default function BusTracker() {
         if (queue.length > 1) {
           const latest = queue[queue.length - 1];
           updateQueueRef.current = [latest];
-          addLog(
-            `[${new Date().toLocaleTimeString()}] Tab refocused — dropped ${queue.length - 1} stale update(s), jumping to latest.`
-          );
         }
         if (updateQueueRef.current.length > 0 && schedulerRef.current === null) {
           lastAnimStartRef.current = 0;
@@ -491,9 +504,8 @@ export default function BusTracker() {
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [addLog]);
+  }, []);
 
-  // ── init Leaflet + draw route stops ─────────────────────────────────────
   // ── init Leaflet ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) return;
@@ -509,12 +521,16 @@ export default function BusTracker() {
 
     mapRef.current = map;
 
-    // ✅ map.whenReady guarantees the map is fully initialised before drawing
     map.whenReady(() => {
       loadRouteStops();
+      setTimeout(() => map.invalidateSize(), 0);
     });
 
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener("resize", handleResize);
+
     return () => {
+      window.removeEventListener("resize", handleResize);
       map.remove();
       mapRef.current = null;
     };
@@ -528,25 +544,17 @@ export default function BusTracker() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      setConnected(true);
       setStatus("connecting");
-      addLog(`[${new Date().toLocaleTimeString()}] Connected to server.`);
       setTimeout(() => joinRoomRef.current(tripId), 100);
     });
 
     socket.on("disconnect", () => {
-      setConnected(false);
       setStatus("idle");
       joinedRoomRef.current = null;
-      addLog(`[${new Date().toLocaleTimeString()}] Disconnected from server.`);
     });
 
     socket.on("locationUpdate", (data: LocationUpdate) => {
       if (data.tripId !== joinedRoomRef.current) return;
-      setLastUpdate(data);
-      addLog(
-        `[${new Date().toLocaleTimeString()}] Trip ${data.tripId.slice(-6)} → lat:${data.lat.toFixed(4)} lon:${data.lon.toFixed(4)}${data.vel != null ? ` vel:${data.vel}km/h` : ""}`
-      );
       enqueueUpdate(data);
     });
 
@@ -554,7 +562,6 @@ export default function BusTracker() {
       if (data.tripId !== joinedRoomRef.current) return;
       const pos: LatLng = [data.lat, data.lon];
       currentPosRef.current = pos;
-      setLastUpdate(data);
       setStatus("last_known");
       const map = mapRef.current;
       if (map) {
@@ -563,10 +570,6 @@ export default function BusTracker() {
           markerRef.current = L.marker(pos, { icon: makeBusIcon(0.6) }).addTo(map);
         }
       }
-      const age = Math.round((Date.now() - data.timestamp) / 1000 / 60);
-      addLog(
-        `[${new Date().toLocaleTimeString()}] Last known location (${age}m ago) → lat:${data.lat.toFixed(4)} lon:${data.lon.toFixed(4)}`
-      );
     });
 
     return () => {
@@ -576,108 +579,107 @@ export default function BusTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── derived UI ────────────────────────────────────────────────────────────
-  const chipClass =
-    status === "riding" ? "active" :
-      status === "waiting" ? "waiting" :
-        status === "last_known" ? "waiting" :
-          status === "stopped" ? "error" : "";
+  const flyToStop = useCallback((stop: Stop) => {
+    mapRef.current?.flyTo([stop.lat, stop.lng], 16, { duration: 0.8 });
+  }, []);
+
+  const lastIdx = stops.length - 1;
 
   return (
-    <>
-      <div className="smt-root">
+    <div className="smt-root" data-theme={theme}>
 
-        {/* Header */}
-        <div className="smt-header">
-          <h1 className="smt-title">Bus Tracker</h1>
-          <span className={`smt-badge ${connected ? "" : "disconnected"}`}>
-            {connected ? "● Live" : "○ Disconnected"}
-          </span>
-          {tripId && (
-            <span className="smt-badge" style={{ background: "#e8f0fe", borderColor: "#c6dafc", color: "#1a73e8" }}>
-              room: {tripId.slice(-8)}
-            </span>
-          )}
-          <button className="smt-back-btn" onClick={handleLeave}>← Back</button>
+      {/* Header */}
+      <div className="smt-header">
+        <div className="smt-brand">
+          <svg className="smt-brand-icon" width="30" height="30" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="20" cy="20" r="18" fill="rgba(26,115,232,0.12)" stroke="#1a73e8" strokeWidth="1.5"/>
+            <polygon points="20,6 30,30 20,25 10,30" fill="#1a73e8" stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round"/>
+            <circle cx="20" cy="20" r="2.5" fill="#ffffff"/>
+          </svg>
+          <h1 className="smt-title">Live<span>BUS</span></h1>
         </div>
+
+        <div className="smt-header-actions">
+          <div className={`smt-status-pill ${status === "idle" ? "disconnected" : ""}`}>
+            <span className={`smt-status-dot ${status === "riding" ? "riding" : ""}`} />
+            {STATUS_LABELS[status]}
+          </div>
+
+          <button
+            type="button"
+            className="smt-theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            {theme === "light" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" fill="currentColor"/>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="5" fill="currentColor"/>
+                <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <line x1="12" y1="1.5" x2="12" y2="4"/>
+                  <line x1="12" y1="20" x2="12" y2="22.5"/>
+                  <line x1="1.5" y1="12" x2="4" y2="12"/>
+                  <line x1="20" y1="12" x2="22.5" y2="12"/>
+                  <line x1="4.2" y1="4.2" x2="6" y2="6"/>
+                  <line x1="18" y1="18" x2="19.8" y2="19.8"/>
+                  <line x1="4.2" y1="19.8" x2="6" y2="18"/>
+                  <line x1="18" y1="6" x2="19.8" y2="4.2"/>
+                </g>
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Body: map + stops sidebar */}
+      <div className="smt-body">
 
         {/* Map */}
         <div className="smt-map-wrap">
-          <div className="smt-map-div" ref={mapContainerRef} />
+          <div className={`smt-map-div ${theme === "dark" ? "smt-map-dark" : ""}`} ref={mapContainerRef} />
+        </div>
 
-          <div className="smt-overlay">
-            <div className="smt-overlay-label">Status</div>
-            <div className="smt-overlay-val">{STATUS_LABELS[status]}</div>
+        {/* Stops sidebar */}
+        <div className="smt-sidebar">
+          <div className="smt-sidebar-header">
+            <span className="smt-sidebar-title">Route Stops</span>
+            {stops.length > 0 && <span className="smt-sidebar-count">{stops.length}</span>}
+          </div>
 
-            {tripId && (
-              <div className="smt-overlay-tripid">trip: {tripId}</div>
+          <div className="smt-stop-list">
+            {stops.length === 0 && (
+              <div className="smt-stop-empty">No stops loaded yet…</div>
             )}
 
-            {lastUpdate && (
-              <div className="smt-overlay-row">
-                <div className="smt-overlay-meta">lat: {lastUpdate.lat.toFixed(5)}</div>
-                <div className="smt-overlay-meta">lon: {lastUpdate.lon.toFixed(5)}</div>
-                {lastUpdate.vel != null && (
-                  <div className="smt-overlay-meta">vel: {lastUpdate.vel} km/h</div>
-                )}
-                <div className="smt-overlay-meta" style={{ marginTop: 6, color: "#80868b" }}>
-                  {new Date(lastUpdate.timestamp).toLocaleTimeString()}
+            {stops.map((stop, i) => {
+              const kind = i === 0 ? "source" : i === lastIdx ? "destination" : "mid";
+              return (
+                <div
+                  key={`${stop.seq}-${i}`}
+                  className={`smt-stop-item ${kind}`}
+                  onClick={() => flyToStop(stop)}
+                >
+                  <div className={`smt-stop-marker ${kind}`}>
+                    {kind === "source" ? "S" : kind === "destination" ? "D" : i + 1}
+                  </div>
+                  <div className="smt-stop-info">
+                    <div className="smt-stop-name">{stop.stop_name}</div>
+                    <div className="smt-stop-tag">
+                      {kind === "source" ? "Source" : kind === "destination" ? "Destination" : `Stop ${i + 1}`}
+                    </div>
+                  </div>
+                  {i < lastIdx && <div className="smt-stop-connector" />}
                 </div>
-              </div>
-            )}
-
-            {status === "riding" && (
-              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                <div className="pulse-dot" />
-                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: "#1a73e8" }}>
-                  animating…
-                </span>
-              </div>
-            )}
+              );
+            })}
           </div>
-        </div>
-
-        {/* Legend */}
-        {routeStopCount > 0 && (
-          <div className="smt-legend">
-            <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#ea4335", background: "rgba(234,67,53,0.15)" }} />
-              Stop ({routeStopCount})
-            </div>
-            <div className="smt-legend-item">
-              <div className="smt-legend-dot" style={{ borderColor: "#34a853", background: "rgba(52,168,83,0.15)" }} />
-              Bus
-            </div>
-          </div>
-        )}
-
-        {/* Status chips */}
-        <div className="smt-status-row">
-          <div className={`smt-chip ${chipClass}`}>{STATUS_LABELS[status]}</div>
-          <div className={`smt-chip ${connected ? "active" : "error"}`}>
-            {connected ? "Socket connected" : "Socket disconnected"}
-          </div>
-          <div className="smt-chip active">tracking room</div>
-          <div className="smt-chip">10s segments</div>
-          {routeStopCount > 0 && (
-            <div className="smt-chip active">{routeStopCount} route stops</div>
-          )}
-        </div>
-
-        {/* Event log */}
-        <div className="smt-log">
-          <div className="smt-log-title">Event log</div>
-          {logs.length === 0 && (
-            <div className="smt-log-entry">No events yet…</div>
-          )}
-          {logs.map((entry) => (
-            <div key={entry.id} className={`smt-log-entry ${entry.isNew ? "new" : ""}`}>
-              {entry.text}
-            </div>
-          ))}
         </div>
 
       </div>
-    </>
+    </div>
   );
 }
