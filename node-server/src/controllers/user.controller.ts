@@ -41,7 +41,7 @@ export const searchBuses = async (req: Request, res: Response) => {
       WHERE s1.stop_name ILIKE ${s}
         AND s2.stop_name ILIKE ${d}
         AND t.status = 'active'
-      ORDER BY t."updatedAt" DESC
+      ORDER BY t.updated_at DESC
     `);
 
     return res.status(200).json(result.rows);
