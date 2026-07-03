@@ -98,6 +98,12 @@ export default function User() {
 
   // 3. Saves Route details to localStorage and navigates to the bus tracking page.
   const handleTrack = async (bus: Bus) => {
+    // Remember which stops the user actually chose to board/alight at, so the
+    // tracker page can highlight them and surface a personalized ETA.
+    localStorage.setItem("trackBoardAlight", JSON.stringify({
+      board:  bus.board_at,
+      alight: bus.alight_at,
+    }));
     try {
       const res = await getStops(bus.tripId);
       const stops = (res.stops || []).map((entry: any) => ({
@@ -235,7 +241,7 @@ export default function User() {
 
                     <div className={`status-pill ${bus.status === "active" ? "active" : "inactive"}`}>
                       <div className="status-dot" />
-                      {bus.status === "active" ? "LIVE" : "OFFLINE"}
+                      {bus.status === "active" ? "ACTIVE" : "OFFLINE"}
                     </div>
                   </div>
 

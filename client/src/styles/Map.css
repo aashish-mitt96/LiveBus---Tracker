@@ -69,6 +69,27 @@ html, body, #root {
   flex-wrap: wrap;
   flex-shrink: 0;
 }
+
+/* ── personal ETA banner (boarding / alighting stop summary) ─────────────── */
+.smt-eta-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--smt-blue-bg);
+  border: 1px solid var(--smt-blue-border);
+  color: var(--smt-blue);
+  font-family: "DM Mono", monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.smt-eta-banner-item::before {
+  content: "🕒 ";
+}
 .smt-brand {
   display: flex;
   align-items: center;
@@ -222,6 +243,18 @@ html, body, #root {
   padding-bottom: 20px;
   cursor: pointer;
 }
+.smt-stop-item.user-board,
+.smt-stop-item.user-alight {
+  background: var(--smt-blue-bg);
+  border-radius: 10px;
+  padding: 8px 8px 20px 8px;
+  margin: -8px -8px 0 -8px;
+}
+.smt-stop-item.user-board .smt-stop-tag,
+.smt-stop-item.user-alight .smt-stop-tag {
+  color: var(--smt-blue);
+  font-weight: 600;
+}
 .smt-stop-connector {
   position: absolute;
   left: 13px;
@@ -282,6 +315,21 @@ html, body, #root {
 }
 .smt-stop-item.destination .smt-stop-tag {
   color: var(--smt-red);
+}
+
+.smt-stop-eta {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-top: 4px;
+  font-family: "DM Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--smt-blue);
+  white-space: nowrap;
+}
+.smt-stop-eta.passed {
+  color: var(--smt-text-muted);
+  font-weight: 500;
 }
 
 /* ── leaflet: light OSM tiles by default, inverted to dark on toggle ────── */

@@ -7,6 +7,7 @@ import { route, routeStop } from "../database/schema/route.schema";
 import { findOrCreateRoute, addStopToRoute, refineDestinationCoords } from "../services/route.service";
 import { clearTripWindow } from "../redis/redisLocation";
 import { sendTrainingSamples } from "../services/training.service";
+import { computeTripEta } from "../services/eta.service";
 
 
 // 1. Start a new trip for a bus.
@@ -33,10 +34,14 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
       ]);
     }
 
+    // Mark any earlier trips on this same route as no longer "current" —
+    // only the freshest run (this one) should ever surface in bus search.
+    await db.update(trip).set({ current: false }).where(eq(trip.routeId, routeRow.routeId));
+
     // Create a new trip instance for this route.
     const [newTrip] = await db
       .insert(trip)
-      .values({ routeId: routeRow.routeId, status: "active" })
+      .values({ routeId: routeRow.routeId, status: "active", current: true })
       .returning();
 
     res.status(isNew ? 201 : 200).json({
@@ -188,6 +193,38 @@ export async function getStops(req: Request, res: Response): Promise<void> {
     });
   } catch (err) {
     console.error("❌ getStops error:", err);
+    res.status(500).json({ success: false, message: "Internal server error." });
+  }
+}
+
+
+
+// 5. Get Estimated Time of Arrival for every Stop on a Trip's Route.
+export async function getTripEta(req: Request, res: Response): Promise<void> {
+  try {
+    const { tripId } = req.params;
+
+    // Fetch trip details.
+    const [existingTrip] = await db.select().from(trip).where(eq(trip.tripId, tripId as string));
+    if (!existingTrip) {
+      res.status(404).json({ success: false, message: "Trip not found." });
+      return;
+    }
+
+    const result = await computeTripEta(existingTrip.routeId, tripId as string);
+    if (!result) {
+      res.status(404).json({ success: false, message: "Route has too few stops for an ETA calculation." });
+      return;
+    }
+
+    res.status(200).json({
+      success:    true,
+      tripId,
+      tripStatus: existingTrip.status,
+      ...result,
+    });
+  } catch (err) {
+    console.error("❌ getTripEta error:", err);
     res.status(500).json({ success: false, message: "Internal server error." });
   }
 }

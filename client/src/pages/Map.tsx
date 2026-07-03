@@ -4,13 +4,25 @@ import L from "leaflet";
 import type { Map, Marker, Polyline } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { io, Socket } from "socket.io-client";
-import { getStops } from "../apis/trip.api";
+import { getStops, getEta } from "../apis/trip.api";
 import '../styles/Map.css';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type LatLng = [number, number];
 type Stop = { lat: number; lng: number; stop_name: string; seq: number };
+
+type StopEta = {
+  seq:                number;
+  stopName:           string;
+  distanceRemainingM: number | null;
+  etaSeconds:         number | null;
+  etaMinutes:         number | null;
+  etaTimestamp:       number | null;
+  passed:             boolean;
+};
+
+type BoardAlight = { board?: string; alight?: string };
 
 type Status = "idle" | "connecting" | "riding" | "waiting" | "stopped" | "last_known";
 
@@ -191,10 +203,44 @@ export default function BusTracker() {
   // ── ui state ────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<Status>("idle");
   const [stops, setStops] = useState<Stop[]>([]);
+  const [etaMap, setEtaMap] = useState<Record<number, StopEta>>({});
+  const [boardAlight, setBoardAlight] = useState<BoardAlight>({});
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof window === "undefined") return "light";
     return (localStorage.getItem("smtTheme") as "light" | "dark") || "light";
   });
+
+  // ── load the board/alight stops the user picked on the search page ────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("trackBoardAlight");
+      if (raw) setBoardAlight(JSON.parse(raw));
+    } catch {
+      // ignore malformed/absent cache
+    }
+  }, []);
+
+  // ── poll ETA for every stop (Where-is-my-train style) ──────────────────────
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+
+    const fetchEta = async () => {
+      try {
+        const res = await getEta(tripId);
+        if (cancelled) return;
+        const map: Record<number, StopEta> = {};
+        (res.stops || []).forEach((s: StopEta) => { map[s.seq] = s; });
+        setEtaMap(map);
+      } catch (err) {
+        console.error("Failed to fetch ETA:", err);
+      }
+    };
+
+    fetchEta();
+    const interval = setInterval(fetchEta, 15_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [tripId]);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
@@ -635,6 +681,33 @@ export default function BusTracker() {
         </div>
       </div>
 
+      {/* Personal ETA banner for the user's chosen boarding/alighting stops */}
+      {(boardAlight.board || boardAlight.alight) && (() => {
+        const boardStop  = stops.find((s) => s.stop_name === boardAlight.board);
+        const alightStop = stops.find((s) => s.stop_name === boardAlight.alight);
+        const boardEta   = boardStop  ? etaMap[boardStop.seq]  : undefined;
+        const alightEta  = alightStop ? etaMap[alightStop.seq] : undefined;
+        if (!boardEta && !alightEta) return null;
+
+        const describe = (eta: StopEta | undefined, label: string) => {
+          if (!eta) return null;
+          if (eta.passed) return `${label}: already passed`;
+          if (eta.etaMinutes === null) return `${label}: ETA unknown`;
+          return `${label} in ~${eta.etaMinutes} min`;
+        };
+
+        return (
+          <div className="smt-eta-banner">
+            {describe(boardEta, "Your boarding stop") && (
+              <span className="smt-eta-banner-item">{describe(boardEta, "Your boarding stop")}</span>
+            )}
+            {describe(alightEta, "Your stop") && (
+              <span className="smt-eta-banner-item">{describe(alightEta, "Your stop")}</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Body: map + stops sidebar */}
       <div className="smt-body">
 
@@ -657,10 +730,22 @@ export default function BusTracker() {
 
             {stops.map((stop, i) => {
               const kind = i === 0 ? "source" : i === lastIdx ? "destination" : "mid";
+              const eta = etaMap[stop.seq];
+              const isBoard  = !!boardAlight.board  && stop.stop_name === boardAlight.board;
+              const isAlight = !!boardAlight.alight && stop.stop_name === boardAlight.alight;
+
+              const etaLabel = !eta
+                ? "—"
+                : eta.passed
+                  ? "Passed"
+                  : eta.etaMinutes !== null
+                    ? `${eta.etaMinutes} min`
+                    : "—";
+
               return (
                 <div
                   key={`${stop.seq}-${i}`}
-                  className={`smt-stop-item ${kind}`}
+                  className={`smt-stop-item ${kind} ${isBoard ? "user-board" : ""} ${isAlight ? "user-alight" : ""}`}
                   onClick={() => flyToStop(stop)}
                 >
                   <div className={`smt-stop-marker ${kind}`}>
@@ -670,8 +755,11 @@ export default function BusTracker() {
                     <div className="smt-stop-name">{stop.stop_name}</div>
                     <div className="smt-stop-tag">
                       {kind === "source" ? "Source" : kind === "destination" ? "Destination" : `Stop ${i + 1}`}
+                      {isBoard  && " · You board here"}
+                      {isAlight && " · You alight here"}
                     </div>
                   </div>
+                  <div className={`smt-stop-eta ${eta?.passed ? "passed" : ""}`}>{etaLabel}</div>
                   {i < lastIdx && <div className="smt-stop-connector" />}
                 </div>
               );

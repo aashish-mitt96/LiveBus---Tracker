@@ -130,3 +130,13 @@ export const pinStop = async (
     body: JSON.stringify({ lat, lng }),
   });
 };
+
+
+
+// 7. Get ETA API — estimated arrival time for every stop on the trip's route.
+export const getEta = async (tripId: string) => {
+  console.log("Get ETA API called with:", tripId);
+  return apiRequest(`/api/trips/${tripId}/eta`, {
+    method: "GET",
+  });
+};
