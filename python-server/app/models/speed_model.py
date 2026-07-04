@@ -1,94 +1,145 @@
+"""
+One speed model per route. Predicts expected bus speed (m/s) given where on
+the route it is (progress fraction) and when (time of day / day of week).
+
+Why this shape, and why it's retrained-from-corpus rather than online:
+raw GPS points only live 2h in Redis (trip:{id}:locs), so by the time a
+trip ends and training samples are forwarded here, the only place a
+lasting training set can live is with us. Each /model/train call appends
+this trip's samples to a small per-route JSONL corpus, then refits on the
+whole corpus. At the sample volumes a bus route produces (dozens of points
+per trip) this is cheap even after months of trips — no need for real
+online/incremental learning to get the "improves as more data arrives"
+behavior that was asked for.
+
+Time-of-day is cyclic (23:59 is close to 00:00), so minute_of_day is
+sin/cos encoded rather than passed in as a raw linear feature — a real,
+if modest, accuracy improvement over a naive model, which is about as
+far as "fantastic ML model" can honestly go without overselling it.
+"""
+import json
+import math
+import os
 from dataclasses import dataclass
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from typing import List, Optional
 
+import joblib
 import numpy as np
+from sklearn.ensemble import HistGradientBoostingRegressor
 
-try:
-    from sklearn.ensemble import HistGradientBoostingRegressor
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
+from ..config import DEFAULT_SPEED_MPS, DEFAULT_VELOCITY_VARIANCE, MIN_TRAINING_SAMPLES, MODEL_DIR
 
-from .. import config
+MIN_PLAUSIBLE_SPEED_MPS = 0.5
+MAX_PLAUSIBLE_SPEED_MPS = 25.0
 
 
-# Represents a Single Historical Speed Record.
 @dataclass
-class SpeedSample:
-
-    route_id:          str                
-    progress_fraction: float   
-    minute_of_day:     float          
-    day_of_week:       int             
-    speed_mps:         float              
+class TrainingSample:
+    progress_fraction: float
+    minute_of_day: int
+    day_of_week: int
+    speed_mps: float
 
 
-
-class HistoricalSpeedModel:
-    """Predicts Expected Bus Speed using Historical Trip Data."""
-
-    # Minimum Samples required to Train an ML model.
-    MIN_SAMPLES_FOR_MODEL = 200
+def _model_path(route_id: str) -> str:
+    return os.path.join(MODEL_DIR, f"{route_id}.joblib")
 
 
-    # Initialize storage for trained models and route averages.
-    def __init__(self):
-        self._models: dict[str, object] = {}
-        self._route_avg: dict[str, float] = {}
-        # Cached tzinfo, built once from config rather than re-parsed every tick.
-        self._tz = ZoneInfo(config.TIMEZONE)
+def _corpus_path(route_id: str) -> str:
+    return os.path.join(MODEL_DIR, f"{route_id}.corpus.jsonl")
 
 
-    # Train a separate model for each route.
-    def fit(self, samples: list[SpeedSample]):
-        by_route: dict[str, list[SpeedSample]] = {}
+def _featurize(progress_fraction: float, minute_of_day: int, day_of_week: int) -> List[float]:
+    angle = 2 * math.pi * (minute_of_day / 1440.0)
+    return [progress_fraction, math.sin(angle), math.cos(angle), day_of_week]
 
-        # Group samples by route.
+
+class RouteSpeedModel:
+    """Loaded (or empty) wrapper around a route's persisted HistGradientBoostingRegressor."""
+
+    def __init__(self, route_id: str, estimator: Optional[HistGradientBoostingRegressor], residual_std: float, sample_count: int):
+        self.route_id = route_id
+        self.estimator = estimator
+        self.residual_std = residual_std
+        self.sample_count = sample_count
+
+    @property
+    def is_trained(self) -> bool:
+        return self.estimator is not None and self.sample_count >= MIN_TRAINING_SAMPLES
+
+    @classmethod
+    def load(cls, route_id: str) -> "RouteSpeedModel":
+        path = _model_path(route_id)
+        if os.path.exists(path):
+            payload = joblib.load(path)
+            return cls(route_id, payload["estimator"], payload["residual_std"], payload["sample_count"])
+        return cls(route_id, None, math.sqrt(DEFAULT_VELOCITY_VARIANCE), 0)
+
+    def predict_speed(self, progress_fraction: float, minute_of_day: int, day_of_week: int) -> float:
+        if not self.is_trained:
+            return DEFAULT_SPEED_MPS
+        x = np.array([_featurize(progress_fraction, minute_of_day, day_of_week)])
+        speed = float(self.estimator.predict(x)[0])
+        return min(MAX_PLAUSIBLE_SPEED_MPS, max(MIN_PLAUSIBLE_SPEED_MPS, speed))
+
+    def velocity_variance(self) -> float:
+        """Measurement noise fed into the Kalman filter for this model's
+        predicted-speed 'measurement'. Falls back to a fixed default until
+        there's enough data for the model's own residual spread to be
+        trustworthy."""
+        if not self.is_trained:
+            return DEFAULT_VELOCITY_VARIANCE
+        return max(0.25, self.residual_std ** 2)
+
+
+def _append_corpus(route_id: str, samples: List[TrainingSample]) -> List[TrainingSample]:
+    path = _corpus_path(route_id)
+    with open(path, "a") as f:
         for s in samples:
-            by_route.setdefault(s.route_id, []).append(s)
+            f.write(json.dumps(s.__dict__) + "\n")
 
-        for route_id, route_samples in by_route.items():
-            speeds = [s.speed_mps for s in route_samples]
-
-            # Store average speed for fallback.
-            self._route_avg[route_id] = float(np.mean(speeds))
-
-            # Train ML model if sufficient data is available.
-            if SKLEARN_AVAILABLE and len(route_samples) >= self.MIN_SAMPLES_FOR_MODEL:
-                X = np.array(
-                    [[s.progress_fraction, s.minute_of_day, s.day_of_week] for s in route_samples]
-                )
-                y = np.array(speeds)
-
-                model = HistGradientBoostingRegressor(max_depth=4, max_iter=150)
-                model.fit(X, y)
-
-                self._models[route_id] = model
+    all_samples: List[TrainingSample] = []
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            all_samples.append(TrainingSample(**d))
+    return all_samples
 
 
-    # Predict bus speed at the given route position and time.
-    def predict_speed(self, route_id: str, s: float, total_length: float, ts: float) -> float:
-        if total_length <= 0:
-            return config.DEFAULT_SPEED_MPS
+def train_route_model(route_id: str, samples: List[TrainingSample]) -> RouteSpeedModel:
+    """Append this trip's samples to the route's corpus and refit."""
+    filtered = [
+        s for s in samples
+        if MIN_PLAUSIBLE_SPEED_MPS <= s.speed_mps <= MAX_PLAUSIBLE_SPEED_MPS
+    ]
+    all_samples = _append_corpus(route_id, filtered)
 
-        # Build model features.
-        progress_fraction = min(1.0, max(0.0, s / total_length))
-        dt = datetime.fromtimestamp(ts, tz=self._tz)
-        minute_of_day = dt.hour * 60 + dt.minute
-        day_of_week = dt.weekday()
+    if len(all_samples) < MIN_TRAINING_SAMPLES:
+        # Not enough data yet to fit anything meaningful — persist nothing,
+        # callers fall back to DEFAULT_SPEED_MPS / route_segment_speed.
+        return RouteSpeedModel(route_id, None, math.sqrt(DEFAULT_VELOCITY_VARIANCE), len(all_samples))
 
-        # Use trained ML model if available.
-        model = self._models.get(route_id)
-        if model is not None:
-            X = np.array([[progress_fraction, minute_of_day, day_of_week]])
-            pred = float(model.predict(X)[0])
-            return float(np.clip(pred, 0.5, config.MAX_SPEED_MPS))
+    X = np.array([_featurize(s.progress_fraction, s.minute_of_day, s.day_of_week) for s in all_samples])
+    y = np.array([s.speed_mps for s in all_samples])
 
-        # Otherwise use the route's average speed.
-        avg = self._route_avg.get(route_id)
-        if avg is not None:
-            return float(np.clip(avg, 0.5, config.MAX_SPEED_MPS))
+    estimator = HistGradientBoostingRegressor(
+        max_depth=4,
+        max_iter=150,
+        learning_rate=0.08,
+        l2_regularization=0.5,
+        random_state=42,
+    )
+    estimator.fit(X, y)
 
-        # Final fallback to the global default speed.
-        return config.DEFAULT_SPEED_MPS
+    residuals = y - estimator.predict(X)
+    residual_std = float(np.std(residuals)) if len(residuals) > 1 else math.sqrt(DEFAULT_VELOCITY_VARIANCE)
+    residual_std = max(residual_std, 0.5)  # never claim to be more confident than this
+
+    joblib.dump(
+        {"estimator": estimator, "residual_std": residual_std, "sample_count": len(all_samples)},
+        _model_path(route_id),
+    )
+    return RouteSpeedModel(route_id, estimator, residual_std, len(all_samples))
