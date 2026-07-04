@@ -1,7 +1,7 @@
 from sqlalchemy import text
 from typing import List, Optional
 
-from ..services.geo import RouteStopPoint
+from ..services.route_geometry import RouteStopPoint
 from ..connectors.database_engine import get_engine
 
 
