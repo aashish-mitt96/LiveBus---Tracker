@@ -1,18 +1,13 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "../database/dbConnection";
-import { routeStop } from "../database/schema/route.schema";
+import { routeStop, routeSegmentSpeed } from "../database/schema/route.schema";
 import { redisClient } from "../redis/redisConnection";
-import { buildRoutePath, projectOntoPath, PathPoint } from "./geo.service";
+import { buildRoutePath, PathPoint, projectOntoPath } from "./geo.service";
 
-
-// Fallback average speed (m/s) used whenever we don't have a trustworthy live
-// speed reading yet — roughly 23 km/h, a reasonable in-city bus average
-// once you factor in traffic lights and stops.
+// Fallback speed (m/s) used for any segment that hasn't accumulated enough
+// trip history yet — roughly 23 km/h, a reasonable in-city bus average.
+// Same number Node and the predictor service already agree on.
 const DEFAULT_SPEED_MPS = Number(process.env.DEFAULT_ETA_SPEED_MPS) || 6.5;
-
-// Below this speed we don't trust the instantaneous GPS speed (bus could be
-// idling at a signal) and fall back to the default average instead.
-const MIN_TRUSTED_SPEED_MPS = 1.0;
 
 // Treat the bus as having "reached" a stop once it's within this many
 // meters of it, to absorb GPS/map-matching jitter around the exact point.
@@ -34,14 +29,31 @@ export type StopEta = {
 
 export type TripEtaResult = {
   hasLiveLocation: boolean;
-  current: { lat: number; lon: number; velocity: number; timestamp: number } | null;
-  speedUsedMps: number;
+  current: { lat: number; lon: number; timestamp: number } | null;
+  currentSegmentSpeedMps: number | null; // informational — speed used for the segment the bus is on right now
   stops: StopEta[];
 };
 
 
-// Compute an ETA for every stop on a trip's route, based on the last known
-// (live or predicted) location cached in Redis by the location pipeline.
+// Build a lookup of this route's known average speed (m/s) per
+// (fromStopId -> toStopId) segment, as maintained by the predictor service
+// after every completed trip. Missing entries fall back to DEFAULT_SPEED_MPS.
+async function loadSegmentSpeeds(routeId: string): Promise<Map<string, number>> {
+  const rows = await db.select().from(routeSegmentSpeed).where(eq(routeSegmentSpeed.routeId, routeId));
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(`${row.fromStopId}:${row.toStopId}`, row.avgSpeedMps);
+  }
+  return map;
+}
+
+
+// Compute an ETA for every stop on a trip's route, using purely historical
+// average speeds per segment (route_segment_speed) — no live GPS velocity
+// involved. The bus's *position* still comes from the live/last-known
+// location cache (real GPS or a dead-zone prediction, doesn't matter which);
+// only the *speed* used to convert remaining distance into time is now
+// always the historical average for each segment travelled.
 export async function computeTripEta(routeId: string, tripId: string): Promise<TripEtaResult | null> {
 
   // Fetch the route's stops in travel order.
@@ -54,9 +66,29 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
   const points: PathPoint[] = stops.map((s) => ({ lat: s.lat, lng: s.lng }));
   const path = buildRoutePath(points);
 
+  // Per-segment historical average speed, one entry per (stop[j] -> stop[j+1]).
+  const segmentSpeedMap = await loadSegmentSpeeds(routeId);
+  const segSpeeds: number[] = [];
+  for (let j = 0; j < stops.length - 1; j++) {
+    const key = `${stops[j].id}:${stops[j + 1].id}`;
+    segSpeeds.push(segmentSpeedMap.get(key) ?? DEFAULT_SPEED_MPS);
+  }
+
+  // Precompute: time (seconds) to travel each full segment, and a running
+  // total "time from route start to stop k" so per-stop ETA is just a
+  // couple of array lookups plus one partial-segment adjustment.
+  const segTimes: number[] = segSpeeds.map((speed, j) => {
+    const segLen = path.cumDist[j + 1] - path.cumDist[j];
+    return segLen / speed;
+  });
+  const cumSegTime: number[] = [0];
+  for (let j = 0; j < segTimes.length; j++) {
+    cumSegTime.push(cumSegTime[cumSegTime.length - 1] + segTimes[j]);
+  }
+
   // Read the latest known location (published by the Node location pipeline
   // or the Python dead-zone predictor — either way it lands on this key).
-  let current: { lat: number; lon: number; velocity: number; timestamp: number } | null = null;
+  let current: { lat: number; lon: number; timestamp: number } | null = null;
   try {
     const raw = await redisClient.get(`lastLocation:${tripId}`);
     if (raw) {
@@ -64,7 +96,6 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
       current = {
         lat:       parsed.lat,
         lon:       parsed.lon,
-        velocity:  typeof parsed.velocity === "number" ? parsed.velocity : 0,
         timestamp: parsed.timestamp ?? Date.now(),
       };
     }
@@ -77,7 +108,7 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
     return {
       hasLiveLocation: false,
       current: null,
-      speedUsedMps: DEFAULT_SPEED_MPS,
+      currentSegmentSpeedMps: null,
       stops: stops.map((s) => ({
         seq:                s.seq,
         stopName:           s.stopName,
@@ -94,8 +125,14 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
   }
 
   const currentS = projectOntoPath(current.lat, current.lon, path);
-  const speed    = current.velocity >= MIN_TRUSTED_SPEED_MPS ? current.velocity : DEFAULT_SPEED_MPS;
   const now      = Date.now();
+
+  // Which segment is the bus currently on?
+  let segIdx = segSpeeds.length - 1;
+  for (let j = 0; j < path.cumDist.length - 1; j++) {
+    if (currentS <= path.cumDist[j + 1]) { segIdx = j; break; }
+  }
+  const currentSegmentSpeedMps = segSpeeds[segIdx] ?? DEFAULT_SPEED_MPS;
 
   const stopEtas: StopEta[] = stops.map((s, idx) => {
     const stopS  = path.cumDist[idx];
@@ -108,8 +145,15 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
       };
     }
 
-    const remainingM  = stopS - currentS;
-    const etaSeconds  = remainingM / speed;
+    // Time from currentS to this stop = remainder of the current (partial)
+    // segment, at that segment's historical speed, plus the full historical
+    // travel time for every complete segment in between.
+    const remainderOfCurrentSegmentM = path.cumDist[segIdx + 1] - currentS;
+    const timeThroughCurrentSegment  = remainderOfCurrentSegmentM / currentSegmentSpeedMps;
+    const timeForFullSegmentsBetween = cumSegTime[idx] - cumSegTime[segIdx + 1];
+
+    const etaSeconds = Math.max(0, timeThroughCurrentSegment + timeForFullSegmentsBetween);
+    const remainingM = stopS - currentS;
 
     return {
       seq: s.seq, stopName: s.stopName, lat: s.lat, lng: s.lng, isTerminal: s.isTerminal,
@@ -121,5 +165,5 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
     };
   });
 
-  return { hasLiveLocation: true, current, speedUsedMps: speed, stops: stopEtas };
+  return { hasLiveLocation: true, current, currentSegmentSpeedMps, stops: stopEtas };
 }

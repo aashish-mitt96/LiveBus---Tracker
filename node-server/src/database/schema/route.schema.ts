@@ -44,3 +44,30 @@ export const routeStop = pgTable("route_stop", {
   routeIdx: index("route_stop_route_idx").on(t.routeId),
   nameTrgm: index("route_stop_name_trgm_idx").using("gin", sql`${t.stopName} gin_trgm_ops`)
 }));
+
+
+
+// Stores a running-average speed (m/s) between every consecutive stop pair
+// on a route. Written by the Python predictor service (/model/train) after
+// each trip ends; Node only reads this (e.g. as an ETA fallback, or to
+// surface "typical segment speed" in the UI). One unique row per
+// (routeId, fromStopId, toStopId) — running average is merged in-place as
+// more trips complete, rather than overwritten.
+export const routeSegmentSpeed = pgTable("route_segment_speed", {
+
+  id:      text("id").primaryKey().$defaultFn(() => createId()),
+  routeId: text("route_id").notNull().references(() => route.routeId, { onDelete: "cascade" }),
+
+  fromStopId: text("from_stop_id").notNull().references(() => routeStop.id, { onDelete: "cascade" }),
+  toStopId:   text("to_stop_id").notNull().references(() => routeStop.id, { onDelete: "cascade" }),
+
+  avgSpeedMps: doublePrecision("avg_speed_mps").notNull(),
+  sampleCount: integer("sample_count").notNull().default(0),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+
+}, (t) => ({
+  uniqSegment: uniqueIndex("uniq_route_segment").on(t.routeId, t.fromStopId, t.toStopId),
+  routeIdx:    index("route_segment_speed_route_idx").on(t.routeId),
+}));
