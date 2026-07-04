@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from ..connectors.database import get_engine
+from ..connectors.database_engine import get_engine
 
 
 
