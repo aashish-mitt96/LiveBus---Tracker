@@ -38,8 +38,20 @@ interface LocationUpdate {
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
-const ANIM_DURATION = 10_000;
-const SLOT_MS = 10_000;
+
+// How long each queued segment takes to animate is derived from the real
+// gap between that update's `timestamp` and the previous one's — normal GPS
+// pings arrive ~10s apart, but dead-zone predictions from the backend's
+// watchdog arrive every ~5s (see node-server WATCHDOG_INTERVAL_MS). If we
+// always animated over a fixed 10s, updates would arrive faster than we can
+// play them back during a dead zone and the on-screen bus would drift
+// further and further behind real time the longer the dead zone lasted.
+// Falling back to DEFAULT_ANIM_MS when we don't have two timestamps to
+// compare yet (first update) or the gap looks bogus (clock skew, out-of-
+// order delivery) keeps behaviour identical to before in the common case.
+const DEFAULT_ANIM_MS = 10_000;
+const MIN_ANIM_MS = 2_000;
+const MAX_ANIM_MS = 12_000;
 
 const STATUS_LABELS: Record<Status, string> = {
   idle: "Waiting for connection…",
@@ -199,6 +211,13 @@ export default function BusTracker() {
   const updateQueueRef = useRef<LocationUpdate[]>([]);
   const lastAnimStartRef = useRef<number>(0);
   const schedulerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `timestamp` (server-side event time) of the last update we actually
+  // displayed — used to measure the real gap to the next update, which may
+  // not be 10s (see DEFAULT_ANIM_MS comment above).
+  const lastUpdateTimestampRef = useRef<number | null>(null);
+  // Duration used to animate/pace the segment currently in flight; scheduleNext
+  // paces the *next* dequeue against this rather than a fixed SLOT_MS.
+  const lastSegmentDurationRef = useRef<number>(DEFAULT_ANIM_MS);
 
   // ── ui state ────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<Status>("idle");
@@ -364,6 +383,8 @@ export default function BusTracker() {
       schedulerRef.current = null;
     }
     lastAnimStartRef.current = 0;
+    lastUpdateTimestampRef.current = null;
+    lastSegmentDurationRef.current = DEFAULT_ANIM_MS;
 
     currentPosRef.current = null;
     routePointsRef.current = [];
@@ -408,7 +429,7 @@ export default function BusTracker() {
 
   // ── animate segment ──────────────────────────────────────────────────────
   const animateSegment = useCallback(
-    (from: LatLng, to: LatLng) => {
+    (from: LatLng, to: LatLng, durationMs: number = DEFAULT_ANIM_MS) => {
       const map = mapRef.current;
       if (!map) return;
 
@@ -440,7 +461,7 @@ export default function BusTracker() {
         }
 
         if (startTimeRef.current === null) startTimeRef.current = ts;
-        const raw = Math.min((ts - startTimeRef.current) / ANIM_DURATION, 1);
+        const raw = Math.min((ts - startTimeRef.current) / durationMs, 1);
         const t = easeInOut(raw);
         const pos = getPositionAt(t, routePointsRef.current, cumulDistRef.current);
 
@@ -493,7 +514,9 @@ export default function BusTracker() {
     const now = Date.now();
     const elapsed = now - lastAnimStartRef.current;
     const isHidden = document.visibilityState === "hidden";
-    const delay = isHidden ? 0 : Math.max(0, SLOT_MS - elapsed);
+    // Pace against how long the *previous* segment was actually given to
+    // animate, not a fixed slot — see DEFAULT_ANIM_MS comment.
+    const delay = isHidden ? 0 : Math.max(0, lastSegmentDurationRef.current - elapsed);
 
     schedulerRef.current = setTimeout(() => {
       schedulerRef.current = null;
@@ -503,6 +526,18 @@ export default function BusTracker() {
 
       lastAnimStartRef.current = Date.now();
       const newPos: LatLng = [next.lat, next.lon];
+
+      // Derive this segment's animation duration from the real gap between
+      // this update's timestamp and the last one we displayed, clamped to a
+      // sane range. Falls back to DEFAULT_ANIM_MS if we don't have a prior
+      // timestamp yet or the gap looks bogus (<=0, e.g. out-of-order delivery).
+      const prevTs = lastUpdateTimestampRef.current;
+      const rawGap = prevTs !== null ? next.timestamp - prevTs : NaN;
+      const duration = Number.isFinite(rawGap) && rawGap > 0
+        ? Math.min(MAX_ANIM_MS, Math.max(MIN_ANIM_MS, rawGap))
+        : DEFAULT_ANIM_MS;
+      lastUpdateTimestampRef.current = next.timestamp;
+      lastSegmentDurationRef.current = duration;
 
       if (currentPosRef.current === null) {
         currentPosRef.current = newPos;
@@ -515,7 +550,7 @@ export default function BusTracker() {
           }
         }
       } else {
-        animateSegmentRef.current(currentPosRef.current, newPos);
+        animateSegmentRef.current(currentPosRef.current, newPos, duration);
       }
 
       scheduleNextRef.current();
