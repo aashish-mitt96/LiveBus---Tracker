@@ -7,6 +7,22 @@ import { redisClient } from "../redis/redisConnection";
 
 const LOCATIONIQ_TOKEN = process.env.LOCATIONIQ_TOKEN;
 
+// Shape of the fields we actually read from the LocationIQ reverse-geocode response.
+type ReverseGeocodeResponse = {
+  address?: {
+    amenity?: string;
+    road?: string;
+    neighbourhood?: string;
+    suburb?: string;
+    village?: string;
+    town?: string;
+    city?: string;
+    county?: string;
+    state_district?: string;
+    state?: string;
+  };
+};
+
 
 
 // Reverse Geocode Coordinates to get Readable Place Name.
@@ -15,7 +31,7 @@ export async function getPlaceName(lat: number, lng: number): Promise<string> {
   const url = `https://us1.locationiq.com/v1/reverse?key=${LOCATIONIQ_TOKEN}&lat=${lat}&lon=${lng}&format=json`;
   try {
     const response = await fetch(url);
-    const data     = await response.json();
+    const data     = (await response.json()) as ReverseGeocodeResponse;
     const addr     = data.address || {};
 
     // Return the most Specific Available Location Name.

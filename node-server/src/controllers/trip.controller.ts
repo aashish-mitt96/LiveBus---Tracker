@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Request, Response } from "express";
 import { db } from "../database/dbConnection";
 import { trip } from "../database/schema/trip.schema";
 import { flushStopsToRoute } from "../services/stops.service";
 import { route, routeStop } from "../database/schema/route.schema";
-import { findOrCreateRoute, addStopToRoute, refineDestinationCoords } from "../services/route.service";
+import { findOrCreateRoute, refineDestinationCoords } from "../services/route.service";
 import { clearTripWindow } from "../redis/redisLocation";
 import { sendTrainingSamples } from "../services/training.service";
 import { computeTripEta } from "../services/eta.service";
@@ -27,11 +27,37 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
     const { routeRow, isNew } = await findOrCreateRoute(bus_number, s, d);
 
     // Seed terminal stops only when the route is created for the first time.
+    //
+    // NOTE: only one lat/lng pair comes from the client (the driver's
+    // current position at start-trip time) — we do NOT know the
+    // destination's real coordinates yet. The destination stop is seeded as
+    // `resolved: false` so ETA/route-geometry code knows not to trust its
+    // position until refineDestinationCoords() sets the real fix at
+    // end-trip. (Previously this seeded the destination at the SAME
+    // coordinates as the source, which made the route a zero-length path —
+    // and every stop's ETA showed "passed" — for the entire lifetime of a
+    // brand-new route's first trip.)
     if (isNew) {
       await db.insert(routeStop).values([
-        { routeId: routeRow.routeId, seq: 0, stopName: s, lat, lng, isTerminal: true, sampleCount: 1 },
-        { routeId: routeRow.routeId, seq: 1, stopName: d, lat, lng, isTerminal: true, sampleCount: 0 },
+        { routeId: routeRow.routeId, seq: 0, stopName: s, lat, lng, isTerminal: true, sampleCount: 1, resolved: true },
+        { routeId: routeRow.routeId, seq: 1, stopName: d, lat, lng, isTerminal: true, sampleCount: 0, resolved: false },
       ]);
+    }
+
+    // If a previous trip on this same route was left "active" (e.g. the
+    // driver force-started a new trip without ending the last one), close
+    // it out now instead of leaving it running forever: otherwise its
+    // in-memory map-matching/dead-zone state is never cleared, and the
+    // dead-zone watchdog will keep calling the predictor for it indefinitely
+    // once its GPS pings stop arriving.
+    const staleActiveTrips = await db.select().from(trip)
+      .where(and(eq(trip.routeId, routeRow.routeId), eq(trip.status, "active")));
+
+    for (const stale of staleActiveTrips) {
+      await db.update(trip)
+        .set({ status: "completed", endedAt: new Date(), updatedAt: new Date() })
+        .where(eq(trip.tripId, stale.tripId));
+      clearTripWindow(stale.tripId);
     }
 
     // Mark any earlier trips on this same route as no longer "current" —
@@ -59,53 +85,7 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
 
 
 
-// 2. Add a new stop to an Active Trip.
-export async function updateRoute(req: Request, res: Response): Promise<void> {
-  try {
-    const { tripId } = req.params;
-    const { lat, lng, stop_name } = req.body;
-    if (lat === undefined || lng === undefined) {
-      res.status(400).json({ success: false, message: "lat and lng are required." });
-      return;
-    }
-
-    // Allow internal requests even after trip completion.
-    const isInternal = req.headers["x-internal"] === "true";
-
-    // Fetch trip details.
-    const [existingTrip] = await db.select().from(trip).where(eq(trip.tripId, tripId as string));
-    if (!existingTrip) {
-      res.status(404).json({ success: false, message: "Trip not found." });
-      return;
-    }
-
-    // Prevent external updates after trip completion.
-    if (existingTrip.status === "completed" && !isInternal) {
-      res.status(400).json({ success: false, message: "Cannot update route of a completed trip." });
-      return;
-    }
-
-    // Insert or merge the stop into the route.
-    const result = await addStopToRoute(existingTrip.routeId, {
-      lat,
-      lng,
-      stop_name: stop_name || "Unknown",
-    });
-
-    res.status(200).json({
-      success: true,
-      skipped: result.skipped,
-      stops: result.stops,
-    });
-  } catch (err) {
-    console.error("❌ updateRoute error:", err);
-    res.status(500).json({ success: false, message: "Internal server error." });
-  }
-}
-
-
-
-// 3. End an Active Trip.
+// 2. End an Active Trip.
 export async function endTrip(req: Request, res: Response): Promise<void> {
   try {
     const { tripId }   = req.params;
@@ -168,7 +148,7 @@ export async function endTrip(req: Request, res: Response): Promise<void> {
 
 
 
-// 4. Get all Stops of a Trip.
+// 3. Get all Stops of a Trip.
 export async function getStops(req: Request, res: Response): Promise<void> {
   try {
     const { tripId } = req.params;
@@ -199,7 +179,7 @@ export async function getStops(req: Request, res: Response): Promise<void> {
 
 
 
-// 5. Get Estimated Time of Arrival for every Stop on a Trip's Route.
+// 4. Get Estimated Time of Arrival for every Stop on a Trip's Route.
 export async function getTripEta(req: Request, res: Response): Promise<void> {
   try {
     const { tripId } = req.params;

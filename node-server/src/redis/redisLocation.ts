@@ -25,6 +25,20 @@ const WATCHDOG_INTERVAL_MS = Number(process.env.WATCHDOG_INTERVAL_MS) || 5_000;
 type RawPoint = { lat: number; lon: number; ts: number };
 type LastGoodState = { lat: number; lon: number; ts: number; velocity: number };
 
+// Shape of the fields we actually read from the LocationIQ Map Matching response.
+type MapMatchResponse = {
+    tracepoints?: Array<{ location: [number, number] } | null> | null;
+};
+
+// Shape of the fields we actually read from the FastAPI predictor's /predict response.
+type PredictorResponse = {
+    lat: number;
+    lon: number;
+    velocity_mps: number;
+    predicted_at: number;
+    confidence_radius_m: number;
+};
+
 
 // Stores Recent Raw GPS Points for Each Trip.
 const busRawWindow: Record<string, RawPoint[]> = {};
@@ -106,7 +120,7 @@ async function snapToRoad(window: RawPoint[]): Promise<{ lat: number; lon: numbe
             return null;
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as MapMatchResponse;
         const tracepoints = data.tracepoints || [];
         if (!tracepoints.length) return null;
 
@@ -158,7 +172,7 @@ async function requestPredictedLocation(tripId: string): Promise<void> {
             return;
         }
 
-        const predicted = await response.json();
+        const predicted = (await response.json()) as PredictorResponse;
 
         const processedData = {
             tripId,

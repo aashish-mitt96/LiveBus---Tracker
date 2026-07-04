@@ -9,9 +9,8 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push:pg",
-    "db:studio": "drizzle-kit studio",
-    "simulate": "ts-node src/simulate.ts"
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "keywords": [],
   "author": "",
@@ -33,7 +32,6 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.20.0",
-    "@types/socket.io": "^3.0.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

@@ -32,6 +32,11 @@ export type TripEtaResult = {
   current: { lat: number; lon: number; timestamp: number } | null;
   currentSegmentSpeedMps: number | null; // informational — speed used for the segment the bus is on right now
   stops: StopEta[];
+  // True when the route's destination hasn't been resolved from a placeholder
+  // yet (brand-new route, trip still in progress) — every ETA below is a
+  // definitionally meaningless placeholder ("passed"/0s) and should be
+  // rendered as "unknown" rather than trusted.
+  routeMappingIncomplete: boolean;
 };
 
 
@@ -63,8 +68,35 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
 
   if (stops.length < 2) return null;
 
+  // The destination stop hasn't received its real GPS fix yet (still seeded
+  // at trip-start's placeholder coordinates — see trip.controller.ts). The
+  // route is geometrically a zero-length path right now, which would make
+  // every stop look instantly "passed" if we ran the math below anyway.
+  const destinationUnresolved = stops[stops.length - 1].resolved === false;
+
   const points: PathPoint[] = stops.map((s) => ({ lat: s.lat, lng: s.lng }));
   const path = buildRoutePath(points);
+
+  if (destinationUnresolved || path.totalLength <= 0) {
+    return {
+      hasLiveLocation: false,
+      current: null,
+      currentSegmentSpeedMps: null,
+      routeMappingIncomplete: true,
+      stops: stops.map((s) => ({
+        seq:                s.seq,
+        stopName:           s.stopName,
+        lat:                s.lat,
+        lng:                s.lng,
+        isTerminal:         s.isTerminal,
+        distanceRemainingM: null,
+        etaSeconds:         null,
+        etaMinutes:         null,
+        etaTimestamp:       null,
+        passed:             false,
+      })),
+    };
+  }
 
   // Per-segment historical average speed, one entry per (stop[j] -> stop[j+1]).
   const segmentSpeedMap = await loadSegmentSpeeds(routeId);
@@ -109,6 +141,7 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
       hasLiveLocation: false,
       current: null,
       currentSegmentSpeedMps: null,
+      routeMappingIncomplete: false,
       stops: stops.map((s) => ({
         seq:                s.seq,
         stopName:           s.stopName,
@@ -165,5 +198,5 @@ export async function computeTripEta(routeId: string, tripId: string): Promise<T
     };
   });
 
-  return { hasLiveLocation: true, current, currentSegmentSpeedMps, stops: stopEtas };
+  return { hasLiveLocation: true, current, currentSegmentSpeedMps, routeMappingIncomplete: false, stops: stopEtas };
 }

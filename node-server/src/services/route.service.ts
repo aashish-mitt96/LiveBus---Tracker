@@ -40,13 +40,23 @@ function distanceInMeters(lat1: number, lng1: number, lat2: number, lng2: number
 
 
 // Update Stop Coordinates using Running Average.
-async function mergeIntoStop(stop: typeof routeStop.$inferSelect, lat: number, lng: number) {
+async function mergeIntoStop(
+  stop: typeof routeStop.$inferSelect,
+  lat: number,
+  lng: number,
+  markResolved = false,
+) {
 
   const n = stop.sampleCount;
   const newLat = n === 0 ? lat : (stop.lat * n + lat) / (n + 1);
   const newLng = n === 0 ? lng : (stop.lng * n + lng) / (n + 1);
 
-  const [updated] = await db.update(routeStop).set({ lat: newLat, lng: newLng, sampleCount: n + 1 })
+  const [updated] = await db.update(routeStop).set({
+      lat: newLat,
+      lng: newLng,
+      sampleCount: n + 1,
+      ...(markResolved ? { resolved: true } : {}),
+    })
     .where(eq(routeStop.id, stop.id))
     .returning();
   return updated;
@@ -156,9 +166,21 @@ export async function refineDestinationCoords(routeId: string, lat: number, lng:
   const [destStop] = await db.select().from(routeStop).where(eq(routeStop.routeId, routeId))
     .orderBy(desc(routeStop.seq))
     .limit(1);
-  if (destStop) {
-    await mergeIntoStop(destStop, lat, lng);
+  if (!destStop) return;
+
+  if (!destStop.resolved) {
+    // First real fix for a destination that was only ever seeded with a
+    // placeholder position (see route.schema.ts). Replace outright instead
+    // of averaging a real coordinate in with a bogus one, and flip the
+    // route over to "fully known" so ETA/map code stops treating it as
+    // zero-length.
+    await db.update(routeStop)
+      .set({ lat, lng, sampleCount: 1, resolved: true })
+      .where(eq(routeStop.id, destStop.id));
+    return;
   }
+
+  await mergeIntoStop(destStop, lat, lng, true);
 }
 
 
