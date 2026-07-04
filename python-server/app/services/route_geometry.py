@@ -7,7 +7,6 @@ EARTH_RADIUS_M     = 6371000.0
 METERS_PER_DEG_LAT = 111_320.0
 
 
-
 # Great Circle Distance Between two GPS Coordinates.
 def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     to_rad = math.radians
@@ -20,7 +19,6 @@ def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return EARTH_RADIUS_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-
 # Convert Latitude/Longitude into a Local Cartesian Coordinate System.
 def _to_local_meters(lat: float, lng: float, origin_lat: float, origin_lng: float) -> Tuple[float, float]:
 
@@ -28,7 +26,6 @@ def _to_local_meters(lat: float, lng: float, origin_lat: float, origin_lng: floa
     x = (lng - origin_lng) * meters_per_deg_lng
     y = (lat - origin_lat) * METERS_PER_DEG_LAT
     return x, y
-
 
 
 # Single Stop on a Route.
@@ -39,14 +36,14 @@ class RouteStopPoint:
     stop_name: str
     lat:       float
     lng:       float
-  
+
 
 # Route Geometry with Cumulative Distances.
 @dataclass
 class RoutePath:
     stops:         List[RouteStopPoint]
-    cum_dist:      List[float]     
-    total_length:  float        
+    cum_dist:      List[float]
+    total_length:  float
 
 
 # Build Cumulative Distance Information for a Route.
@@ -68,7 +65,6 @@ def build_route_path(stops: List[RouteStopPoint]) -> RoutePath:
         cum_dist=cum_dist,
         total_length=cum_dist[-1] if cum_dist else 0.0,
     )
-
 
 
 # Project a GPS Point onto the Nearest Point along the Route.
@@ -98,10 +94,9 @@ def project_onto_path(lat: float, lng: float, path: RoutePath) -> float:
     return best_s
 
 
-
 # Convert Distance Along the Route Back into GPS Coordinates.
 def interpolate_at_distance(path: RoutePath, s: float) -> Tuple[float, float]:
-    
+
     if not path.stops:
         return 0.0, 0.0
 
@@ -125,7 +120,6 @@ def interpolate_at_distance(path: RoutePath, s: float) -> Tuple[float, float]:
     return last.lat, last.lng
 
 
-
 # Find which Route Segment Contains the Given Distance.
 def find_segment_index(path: RoutePath, s: float) -> int:
     for i in range(len(path.cum_dist) - 1):
@@ -133,7 +127,6 @@ def find_segment_index(path: RoutePath, s: float) -> int:
             return i
 
     return max(0, len(path.cum_dist) - 2)
-
 
 
 # Convert Distance along the Route into a Value between 0 and 1.

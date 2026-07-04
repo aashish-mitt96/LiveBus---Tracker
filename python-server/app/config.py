@@ -2,18 +2,22 @@ import os
 
 # Same Postgres instance Node uses. This service reads route/route_stop
 # directly (it needs route geometry for basically everything) and owns
-# reads/writes to route_segment_speed.
+# reads/writes to route_segment_speed, route_speed_model, and
+# route_speed_training_sample.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/bus_tracker")
 
-# Where per-route trained models are persisted (joblib) + the accumulating
-# per-route training corpus (json lines). Mount this as a volume in prod so
-# models survive restarts/deploys.
-MODEL_DIR = os.getenv("MODEL_DIR", "./models")
-os.makedirs(MODEL_DIR, exist_ok=True)
+# NOTE: trained models used to live on local disk (MODEL_DIR) as .joblib
+# files, with an accompanying .jsonl training corpus. Both now live in
+# Postgres (route_speed_model / route_speed_training_sample — see
+# db/schema.sql) so every replica of this service reads the same model
+# instead of each holding its own local copy that can drift between
+# instances or vanish on redeploy.
 
-# Kept in sync with Node's DEFAULT_ETA_SPEED_MPS (eta.service.ts) so the two
-# services degrade to the same fallback number when nothing smarter is
-# available yet (brand-new route, no trained model, no segment history).
+# Env var name kept for backwards compatibility with existing deploys; the
+# authoritative value now lives in the `service_config` table so this
+# service and Node's eta.service.ts read the same number instead of two
+# independently-maintained env vars (see services/shared_config.py). This
+# is only the fallback used if that table/row isn't reachable yet.
 DEFAULT_SPEED_MPS = float(os.getenv("DEFAULT_ETA_SPEED_MPS", "6.5"))
 
 # Minimum point-pairs required before we trust a freshly trained model's
@@ -34,3 +38,10 @@ DEFAULT_VELOCITY_VARIANCE = float(os.getenv("DEFAULT_VELOCITY_VARIANCE", "4.0"))
 PROCESS_ACCEL_VARIANCE = float(os.getenv("PROCESS_ACCEL_VARIANCE", "0.35"))
 
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Kolkata")
+
+# In-memory cache TTLs for /predict's hot path. Route geometry rarely
+# changes, so it can sit in cache a long time. Models only change when a
+# background retrain finishes and explicitly invalidates the cache entry,
+# so this TTL is just a safety net, not the primary invalidation path.
+ROUTE_CACHE_TTL_SECONDS = float(os.getenv("ROUTE_CACHE_TTL_SECONDS", "300"))
+MODEL_CACHE_TTL_SECONDS = float(os.getenv("MODEL_CACHE_TTL_SECONDS", "60"))

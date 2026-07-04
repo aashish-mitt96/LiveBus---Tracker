@@ -2,8 +2,9 @@ import time
 from typing import Tuple
 from fastapi import HTTPException
 
-
+from ..config import MODEL_CACHE_TTL_SECONDS, ROUTE_CACHE_TTL_SECONDS
 from ..services.route_geometry import (
+    RoutePath,
     build_route_path,
     find_segment_index,
     interpolate_at_distance,
@@ -12,27 +13,62 @@ from ..services.route_geometry import (
 )
 from ..models.kalman_filter import extrapolate
 from ..models.speed_model import RouteSpeedModel
-from ..data.route_stops import fetch_route_stops
+from ..data.route_stops import fetch_route_stops, fetch_trip_route_id
 from ..services.segment_speed import fetch_segment_speeds
+from ..services import route_cache
 from ..utils.time_utils import minute_of_day, day_of_week
+from ..utils.validation import validate_route_id
 from ..schemas.schemas import PredictRequest, PredictResponse
 
 
 
-# Predict the Current Bus Location when GPS updates Stop.
-def predict(req: PredictRequest):
+# Load Route Geometry, Reusing a Cached Copy when Available.
+def _load_path_cached(route_id: str) -> RoutePath:
+    key = f"path:{route_id}"
+    cached = route_cache.get(key)
+    if cached is not None:
+        return cached
 
-    stops = fetch_route_stops(req.route_id)
+    stops = fetch_route_stops(route_id)
     if len(stops) < 2:
-        raise HTTPException(404, f"Route {req.route_id} has fewer than 2 stops.")
-
+        raise HTTPException(404, f"Route {route_id} has fewer than 2 stops.")
     path = build_route_path(stops)
     if path.total_length <= 0:
-        raise HTTPException(422, f"Route {req.route_id} has zero length.")
+        raise HTTPException(422, f"Route {route_id} has zero length.")
 
-    # Load the trained model and segment speed fallbacks.
-    model = RouteSpeedModel.load(req.route_id)
-    segment_fallback = fetch_segment_speeds(req.route_id)
+    route_cache.set(key, path, ttl_seconds=ROUTE_CACHE_TTL_SECONDS)
+    return path
+
+
+# Load the Speed Model, Reusing a Cached Copy when Available.
+def _load_model_cached(route_id: str) -> RouteSpeedModel:
+    key = f"model:{route_id}"
+    cached = route_cache.get(key)
+    if cached is not None:
+        return cached
+
+    model = RouteSpeedModel.load(route_id)
+    route_cache.set(key, model, ttl_seconds=MODEL_CACHE_TTL_SECONDS)
+    return model
+
+
+# Predict the Current Bus Location when GPS updates Stop.
+def predict(req: PredictRequest) -> PredictResponse:
+
+    validate_route_id(req.route_id)
+    canonical_route_id = fetch_trip_route_id(req.trip_id)
+    if canonical_route_id is None:
+        raise HTTPException(404, f"Trip {req.trip_id} not found.")
+    if canonical_route_id != req.route_id:
+        raise HTTPException(
+            400,
+            f"Trip {req.trip_id} belongs to route {canonical_route_id}, not {req.route_id}.",
+        )
+    route_id = canonical_route_id
+
+    path = _load_path_cached(route_id)
+    model = _load_model_cached(route_id)
+    segment_fallback = fetch_segment_speeds(route_id)
 
     # Convert the last GPS fix into distance along the route.
     s0 = project_onto_path(req.last_known.lat, req.last_known.lon, path)
@@ -67,8 +103,8 @@ def predict(req: PredictRequest):
 
         # Fall back to historical segment speed if the model isn't trained.
         seg_idx = find_segment_index(path, current_s)
-        from_stop = stops[seg_idx].id
-        to_stop = stops[seg_idx + 1].id
+        from_stop = path.stops[seg_idx].id
+        to_stop = path.stops[seg_idx + 1].id
 
         fallback_speed = segment_fallback.get(
             (from_stop, to_stop),

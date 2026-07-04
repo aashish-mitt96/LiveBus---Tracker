@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 
 from .core.predictor import predict
-from .core.trainer import model_train
+from .core.trainer import model_status, model_train
 from .schemas.schemas import (
+    ModelStatusResponse,
     PredictRequest,
     PredictResponse,
     TrainRequest,
@@ -10,7 +11,7 @@ from .schemas.schemas import (
 )
 
 
-app = FastAPI(title="No Network Zone Route Predictor", version="1.0.0")
+app = FastAPI(title="No Network Zone Route Predictor", version="2.0.0")
 
 
 # Health Check Endpoint.
@@ -19,13 +20,16 @@ def health():
     return {"status": "ok"}
 
 
-# Train the Route Speed Model.
 @app.post("/model/train", response_model=TrainResponse)
-def train(req: TrainRequest):
-    return model_train(req)
+def train(req: TrainRequest, background_tasks: BackgroundTasks):
+    return model_train(req, background_tasks)
 
 
-# Predict the Current Bus Location.
+@app.get("/model/status/{route_id}", response_model=ModelStatusResponse)
+def train_status(route_id: str):
+    return model_status(route_id)
+
+
 @app.post("/predict", response_model=PredictResponse)
 def predict_location(req: PredictRequest):
     return predict(req)

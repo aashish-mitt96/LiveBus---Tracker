@@ -1,17 +1,32 @@
-from typing import Dict, List
-from fastapi import HTTPException
 from collections import defaultdict
+from typing import Dict, List
 
+from fastapi import BackgroundTasks, HTTPException
+
+from ..connectors.database_engine import get_engine
 from ..data.route_stops import fetch_route_stops
-from ..services.segment_speed import upsert_segment_speed
-from ..models.speed_model import TrainingSample, train_route_model
-from ..schemas.schemas import SegmentUpdateResult, TrainRequest, TrainResponse
+from ..models.speed_model import RouteSpeedModel, TrainingSample, insert_training_samples, train_route_model
+from ..schemas.schemas import ModelStatusResponse, SegmentUpdateResult, TrainRequest, TrainResponse
+from ..services import route_cache
 from ..services.route_geometry import build_route_path, find_segment_index
+from ..services.segment_speed import upsert_segment_speed
+from ..services.training_lock import try_route_training_lock
+from ..utils.validation import validate_route_id
 
 
+# Runs After the /model/train Response has Already Been Sent.
+def _retrain_in_background(route_id: str) -> None:
+    with get_engine().connect() as conn:
+        with try_route_training_lock(conn, route_id) as acquired:
+            if not acquired:
+                return
+            train_route_model(route_id)
 
-# Train the Speed model for a Route using Completed Trip Samples.
-def model_train(req: TrainRequest):
+    route_cache.invalidate(f"model:{route_id}")
+
+
+# Accept Training Samples for a Route and Queue a Retrain.
+def model_train(req: TrainRequest, background_tasks: BackgroundTasks) -> TrainResponse:
 
     if not req.samples:
         raise HTTPException(400, "No samples provided.")
@@ -28,6 +43,7 @@ def model_train(req: TrainRequest):
             "All samples in one /model/train call must share the same route_id.",
         )
     route_id, samples = next(iter(by_route.items()))
+    validate_route_id(route_id)
 
     # Load Route Geometry.
     stops = fetch_route_stops(route_id)
@@ -57,12 +73,11 @@ def model_train(req: TrainRequest):
         seg_idx  = find_segment_index(path, sample_s)
         segment_speeds[seg_idx].append(s.speed_mps)
 
-    # Train or Update the Route Model.
-    model = train_route_model(route_id, training_samples)
+    # Persist the raw samples right away (fast, plain inserts).
+    accepted = insert_training_samples(route_id, training_samples)
 
-    # Update Average Speed for each Route Segment.
+    # Update Average Speed for each Route Segment (atomic upsert — safe
     segment_results: List[SegmentUpdateResult] = []
-
     for seg_idx, speeds in segment_speeds.items():
         from_stop = stops[seg_idx]
         to_stop   = stops[seg_idx + 1]
@@ -84,15 +99,24 @@ def model_train(req: TrainRequest):
             )
         )
 
-    # Return Training Summary.
+    # Queue the slow part for after the response is sent.
+    background_tasks.add_task(_retrain_in_background, route_id)
+
     return TrainResponse(
-        route_id             = route_id,
-        trained              = model.is_trained,
-        total_corpus_samples = model.sample_count,
-        segments_updated     = segment_results,
-        message=(
-            f"Model trained on {model.sample_count} accumulated samples."
-            if model.is_trained
-            else f"Only {model.sample_count} samples so far — need more before the model is trusted over defaults."
-        ),
+        route_id         = route_id,
+        accepted_samples = accepted,
+        segments_updated = segment_results,
+        retrain_queued   = True,
+        message          = f"{accepted} samples stored; retraining queued in the background.",
+    )
+
+
+# Report the Model's Current Trained Status for a Route.
+def model_status(route_id: str) -> ModelStatusResponse:
+    validate_route_id(route_id)
+    model = RouteSpeedModel.load(route_id)
+    return ModelStatusResponse(
+        route_id=route_id,
+        trained=model.is_trained,
+        sample_count=model.sample_count,
     )

@@ -2,7 +2,6 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-
 class TrainSampleIn(BaseModel):
     route_id:          str
     progress_fraction: float
@@ -23,17 +22,23 @@ class SegmentUpdateResult(BaseModel):
 
 
 class TrainResponse(BaseModel):
-    route_id:             str
-    trained:              bool
-    total_corpus_samples: int
-    segments_updated:     List[SegmentUpdateResult]
-    message:              str
+    route_id:         str
+    accepted_samples: int
+    segments_updated: List[SegmentUpdateResult]
+    retrain_queued:   bool
+    message:          str
+
+
+class ModelStatusResponse(BaseModel):
+    route_id:      str
+    trained:       bool
+    sample_count:  int
 
 
 class LastKnownLocation(BaseModel):
     lat:       float
     lon:       float
-    timestamp: int  
+    timestamp: int
     velocity:  Optional[float] = Field(default=None, description="m/s, if known")
 
 

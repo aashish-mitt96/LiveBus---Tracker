@@ -5,10 +5,9 @@ from ..services.route_geometry import RouteStopPoint
 from ..connectors.database_engine import get_engine
 
 
-
 # Fetch all Stops for a Route in Travel Order.
 def fetch_route_stops(route_id: str) -> List[RouteStopPoint]:
-    
+
     sql = text(
         """
         SELECT id, seq, stop_name, lat, lng
@@ -30,7 +29,6 @@ def fetch_route_stops(route_id: str) -> List[RouteStopPoint]:
         )
         for r in rows
     ]
-
 
 
 # Get the Route Associated with a Trip.

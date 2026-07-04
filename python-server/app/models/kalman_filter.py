@@ -14,11 +14,9 @@ class KalmanState:
     p_vv: float
 
 
-
 # Initialize the Filter with Starting Position & Velocity.
 def _init_state(s0: float, v0: float, position_variance: float, velocity_variance: float) -> KalmanState:
     return KalmanState(s=s0, v=v0, p_ss=position_variance, p_sv=0.0, p_vv=velocity_variance)
-
 
 
 # Predict the Next State Assuming Constant Velocity.
@@ -40,7 +38,6 @@ def _predict(state: KalmanState, dt: float) -> KalmanState:
     p_vv += q * dt
 
     return KalmanState(s=s, v=v, p_ss=p_ss, p_sv=p_sv, p_vv=p_vv)
-
 
 
 # Correct the Predicted Velocity using the Speed Model.
@@ -65,7 +62,6 @@ def _update_with_velocity_measurement(state: KalmanState, v_measured: float, r: 
     p_vv = state.p_vv - k_v * state.p_vv
 
     return KalmanState(s=s, v=v, p_ss=max(p_ss, 0.0), p_sv=p_sv, p_vv=max(p_vv, 0.0))
-
 
 
 # Predict the Bus Position over the Given Elapsed Time.
