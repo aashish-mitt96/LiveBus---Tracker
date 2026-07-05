@@ -38,16 +38,7 @@ export const routeStop = pgTable("route_stop", {
   isTerminal:  boolean("is_terminal").notNull().default(false),
   sampleCount: integer("sample_count").notNull().default(1),
 
-  // False only for a destination stop that was seeded with a placeholder
-  // position at trip start (we only get one lat/lng from the client when a
-  // trip begins, so a brand-new route's destination is provisionally set to
-  // the same coordinates as the source until the trip ends and its real
-  // position is learned — see refineDestinationCoords). Every other stop is
-  // resolved=true from the moment it's created. Callers that build route
-  // geometry (ETA, map rendering) should treat an unresolved destination as
-  // "route not fully known yet" rather than trusting its coordinates.
   resolved: boolean("resolved").notNull().default(true),
-
   createdAt:   timestamp("created_at").defaultNow().notNull(),
   
 }, (t) => ({
@@ -58,12 +49,7 @@ export const routeStop = pgTable("route_stop", {
 
 
 
-// Stores a running-average speed (m/s) between every consecutive stop pair
-// on a route. Written by the Python predictor service (/model/train) after
-// each trip ends; Node only reads this (e.g. as an ETA fallback, or to
-// surface "typical segment speed" in the UI). One unique row per
-// (routeId, fromStopId, toStopId) — running average is merged in-place as
-// more trips complete, rather than overwritten.
+// Stores a running-average speed (m/s) between every consecutive stop pair on a route. 
 export const routeSegmentSpeed = pgTable("route_segment_speed", {
 
   id:      text("id").primaryKey().$defaultFn(() => createId()),

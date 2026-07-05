@@ -2,12 +2,12 @@ import { and, eq } from "drizzle-orm";
 import { Request, Response } from "express";
 import { db } from "../database/dbConnection";
 import { trip } from "../database/schema/trip.schema";
+import { computeTripEta } from "../services/eta.service";
+import { clearTripWindow } from "../redis/redisLocation";
 import { flushStopsToRoute } from "../services/stops.service";
+import { sendTrainingSamples } from "../services/training.service";
 import { route, routeStop } from "../database/schema/route.schema";
 import { findOrCreateRoute, refineDestinationCoords } from "../services/route.service";
-import { clearTripWindow } from "../redis/redisLocation";
-import { sendTrainingSamples } from "../services/training.service";
-import { computeTripEta } from "../services/eta.service";
 
 
 // 1. Start a new trip for a bus.
@@ -26,30 +26,12 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
     // Find an existing route or create a new one.
     const { routeRow, isNew } = await findOrCreateRoute(bus_number, s, d);
 
-    // Seed terminal stops only when the route is created for the first time.
-    //
-    // NOTE: only one lat/lng pair comes from the client (the driver's
-    // current position at start-trip time) — we do NOT know the
-    // destination's real coordinates yet. The destination stop is seeded as
-    // `resolved: false` so ETA/route-geometry code knows not to trust its
-    // position until refineDestinationCoords() sets the real fix at
-    // end-trip. (Previously this seeded the destination at the SAME
-    // coordinates as the source, which made the route a zero-length path —
-    // and every stop's ETA showed "passed" — for the entire lifetime of a
-    // brand-new route's first trip.)
     if (isNew) {
       await db.insert(routeStop).values([
         { routeId: routeRow.routeId, seq: 0, stopName: s, lat, lng, isTerminal: true, sampleCount: 1, resolved: true },
         { routeId: routeRow.routeId, seq: 1, stopName: d, lat, lng, isTerminal: true, sampleCount: 0, resolved: false },
       ]);
     }
-
-    // If a previous trip on this same route was left "active" (e.g. the
-    // driver force-started a new trip without ending the last one), close
-    // it out now instead of leaving it running forever: otherwise its
-    // in-memory map-matching/dead-zone state is never cleared, and the
-    // dead-zone watchdog will keep calling the predictor for it indefinitely
-    // once its GPS pings stop arriving.
     const staleActiveTrips = await db.select().from(trip)
       .where(and(eq(trip.routeId, routeRow.routeId), eq(trip.status, "active")));
 
@@ -60,8 +42,6 @@ export async function startTrip(req: Request, res: Response): Promise<void> {
       clearTripWindow(stale.tripId);
     }
 
-    // Mark any earlier trips on this same route as no longer "current" —
-    // only the freshest run (this one) should ever surface in bus search.
     await db.update(trip).set({ current: false }).where(eq(trip.routeId, routeRow.routeId));
 
     // Create a new trip instance for this route.
@@ -128,8 +108,6 @@ export async function endTrip(req: Request, res: Response): Promise<void> {
       console.error("❌ Stop flushing failed:", err)
     );
 
-    // Forward this trip's location history to the predictor service so its
-    // historical speed model can learn from it (fire-and-forget).
     sendTrainingSamples(tripId as string, existingTrip.routeId);
 
     // Release in-memory map-matching state now that this trip is done.

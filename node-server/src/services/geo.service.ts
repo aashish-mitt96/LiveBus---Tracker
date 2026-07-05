@@ -1,12 +1,9 @@
-// Small, dependency-free geometry helpers shared by services that need to
-// reason about a route as a path (ETA calculation, map-matching, training).
-
 export type PathPoint = { lat: number; lng: number };
 
 export type RoutePath = {
   points:      PathPoint[];
-  cumDist:     number[]; // cumulative distance (meters) up to each point, cumDist.length === points.length
-  totalLength: number;   // meters
+  cumDist:     number[]; 
+  totalLength: number;   
 };
 
 
@@ -45,8 +42,6 @@ export function buildRoutePath(points: PathPoint[]): RoutePath {
 }
 
 
-// Project a GPS point onto the route path, returning the distance travelled
-// along the path (in meters) up to the closest point on the path.
 export function projectOntoPath(lat: number, lng: number, path: RoutePath): number {
   let bestS = 0;
   let bestDist = Infinity;

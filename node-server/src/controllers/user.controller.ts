@@ -22,12 +22,6 @@ export const searchBuses = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Source and Destination cannot be same." });
     }
 
-    // Find trips where source appears before destination on the route.
-    // Only the CURRENT run of a given bus_number/source/destination combo is
-    // considered (t.current = true) — earlier completed runs on the same
-    // route are intentionally excluded so they don't linger in search
-    // results once a newer run has started. Currently-running (active)
-    // buses are surfaced ahead of ones that have finished for the day.
     const result = await db.execute(sql`
       SELECT
         t."tripId"    AS "tripId",

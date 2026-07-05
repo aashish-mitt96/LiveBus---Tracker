@@ -68,7 +68,7 @@ async function mergeIntoStop(
 function findInsertionSeq(stops: (typeof routeStop.$inferSelect)[], newStop: NewStop): number {
 
   let bestCost = Infinity;
-  let bestSeq  = stops[stops.length - 1].seq + 1; // fallback: append at the end
+  let bestSeq  = stops[stops.length - 1].seq + 1; 
 
   for (let i = 0; i < stops.length - 1; i++) {
     const A = stops[i];
@@ -169,11 +169,6 @@ export async function refineDestinationCoords(routeId: string, lat: number, lng:
   if (!destStop) return;
 
   if (!destStop.resolved) {
-    // First real fix for a destination that was only ever seeded with a
-    // placeholder position (see route.schema.ts). Replace outright instead
-    // of averaging a real coordinate in with a bogus one, and flip the
-    // route over to "fully known" so ETA/map code stops treating it as
-    // zero-length.
     await db.update(routeStop)
       .set({ lat, lng, sampleCount: 1, resolved: true })
       .where(eq(routeStop.id, destStop.id));
