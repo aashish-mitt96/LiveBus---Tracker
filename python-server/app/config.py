@@ -1,4 +1,10 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from the python-server root regardless of the working
+# directory the process was launched from.
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 # 1. Database.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/bus_tracker")
