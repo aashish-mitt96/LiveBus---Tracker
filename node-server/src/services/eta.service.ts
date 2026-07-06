@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "../database/dbConnection";
 import { routeStop, routeSegmentSpeed } from "../database/schema/route.schema";
 import { redisClient } from "../redis/redisConnection";
-import { buildRoutePath, PathPoint, projectOntoPath } from "./geo.service";
+import { buildRoutePath, PathPoint, projectOntoPath } from "../utils/route.utils";
 
 
 const DEFAULT_SPEED_MPS = Number(process.env.DEFAULT_ETA_SPEED_MPS) || 6.5;
@@ -19,7 +19,7 @@ export type StopEta = {
   distanceRemainingM: number | null;
   etaSeconds:         number | null;
   etaMinutes:         number | null;
-  etaTimestamp:       number | null; // epoch ms
+  etaTimestamp:       number | null;
   passed:             boolean;
 };
 

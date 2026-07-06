@@ -1,35 +1,16 @@
+import { asc, eq } from "drizzle-orm";
+import { db } from "../database/dbConnection";
+
+import { haversineM, toLocalMeters } from "./math.utils";
+import { routeStop } from "../database/schema/route.schema";
+
 export type PathPoint = { lat: number; lng: number };
 
 export type RoutePath = {
   points:      PathPoint[];
-  cumDist:     number[]; 
-  totalLength: number;   
+  cumDist:     number[];
+  totalLength: number;
 };
-
-
-// Calculate Distance between two Coordinates (Haversine Formula).
-export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) ** 2;
-
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-
-// Convert latitude/longitude to local Cartesian Coordinates (meters), relative to an origin.
-function toLocalMeters(lat: number, lng: number, originLat: number, originLng: number) {
-  const METERS_PER_DEG_LAT = 111_320.0;
-  const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos((originLat * Math.PI) / 180);
-  return { x: (lng - originLng) * metersPerDegLng, y: (lat - originLat) * METERS_PER_DEG_LAT };
-}
 
 
 // Build a RoutePath (with precomputed cumulative distances) from an ordered list of points.
@@ -42,8 +23,22 @@ export function buildRoutePath(points: PathPoint[]): RoutePath {
 }
 
 
+// Fetch a route's stops in travel order and build its RoutePath.
+export async function buildRoutePolyline(routeId: string): Promise<RoutePath | null> {
+
+  const stops = await db.select().from(routeStop)
+    .where(eq(routeStop.routeId, routeId))
+    .orderBy(asc(routeStop.seq));
+
+  if (stops.length < 2) return null;
+
+  return buildRoutePath(stops.map((s) => ({ lat: s.lat, lng: s.lng })));
+}
+
+
+// Project a lat/lon onto the nearest segment of the path to get distance along the route.
 export function projectOntoPath(lat: number, lng: number, path: RoutePath): number {
-  let bestS = 0;
+  let bestS    = 0;
   let bestDist = Infinity;
 
   for (let i = 0; i < path.points.length - 1; i++) {
@@ -57,9 +52,9 @@ export function projectOntoPath(lat: number, lng: number, path: RoutePath): numb
     let t = segLenSq === 0 ? 0 : (px * bx + py * by) / segLenSq;
     t = Math.max(0, Math.min(1, t));
 
-    const dist = Math.hypot(px - t * bx, py - t * by);
+    const dist    = Math.hypot(px - t * bx, py - t * by);
     const segLenM = path.cumDist[i + 1] - path.cumDist[i];
-    const s = path.cumDist[i] + t * segLenM;
+    const s       = path.cumDist[i] + t * segLenM;
 
     if (dist < bestDist) {
       bestDist = dist;

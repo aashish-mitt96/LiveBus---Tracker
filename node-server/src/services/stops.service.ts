@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../database/dbConnection";
+
 import { addStopToRoute } from "./route.service";
 import { trip } from "../database/schema/trip.schema";
 import { redisClient } from "../redis/redisConnection";
@@ -7,19 +8,20 @@ import { redisClient } from "../redis/redisConnection";
 
 const LOCATIONIQ_TOKEN = process.env.LOCATIONIQ_TOKEN;
 
-// Shape of the fields we actually read from the LocationIQ reverse-geocode response.
+
+// Shape of the Fields we actually Read from the LocationIQ Reverse-Geocode Response.
 type ReverseGeocodeResponse = {
   address?: {
-    amenity?: string;
-    road?: string;
-    neighbourhood?: string;
-    suburb?: string;
-    village?: string;
-    town?: string;
-    city?: string;
-    county?: string;
+    amenity?:        string;
+    road?:           string;
+    neighbourhood?:  string;
+    suburb?:         string;
+    village?:        string;
+    town?:           string;
+    city?:           string;
+    county?:         string;
     state_district?: string;
-    state?: string;
+    state?:          string;
   };
 };
 
