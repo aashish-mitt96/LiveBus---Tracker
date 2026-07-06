@@ -38,7 +38,7 @@ export const routeStop = pgTable("route_stop", {
   isTerminal:  boolean("is_terminal").notNull().default(false),
   sampleCount: integer("sample_count").notNull().default(1),
 
-  resolved: boolean("resolved").notNull().default(true),
+  resolved:    boolean("resolved").notNull().default(true),
   createdAt:   timestamp("created_at").defaultNow().notNull(),
   
 }, (t) => ({
